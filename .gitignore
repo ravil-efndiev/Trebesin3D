@@ -1,0 +1,40 @@
+# Python environments and generated files
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# JavaScript dependencies and build output
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+.vite/
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.local
+.vscode/
+.idea/
+
+# Runtime data and private camera captures
+*.log
+logs/
+captures/
+recordings/
+CVService/models/*.task
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
