@@ -5,6 +5,7 @@ import type { StreamOptions, StreamSocket } from "./types.ts";
 export const createFrameStream = ({ url, capture, onStatus, checkHealth, createSocket = (address) => new WebSocket(address) }: StreamOptions) => {
   let stopped = false;
   let socket: StreamSocket | null = null;
+  let consecutiveRejections = 0;
   let retries = 0;
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
   let releaseConnection = () => {};
@@ -173,6 +174,7 @@ export const createFrameStream = ({ url, capture, onStatus, checkHealth, createS
 
           clearTimeout(deadline);
           pendingFrameId = null;
+          consecutiveRejections = 0;
           retries = 0;
           scheduleCapture();
         } else if (message.type === "stream:stopped") {
@@ -184,6 +186,12 @@ export const createFrameStream = ({ url, capture, onStatus, checkHealth, createS
           if (message.fatal) {
             fail(`CV service: ${message.message}`);
           } else if (streamId && message.streamId === streamId && message.frameId === pendingFrameId) {
+            consecutiveRejections++;
+            if (consecutiveRejections >= config.maxConsecutiveRejections) {
+              fail("The service repeatedly rejected camera frames. Check the camera and service, then start again.");
+              return;
+            }
+
             clearTimeout(deadline);
             pendingFrameId = null;
             scheduleCapture();

@@ -14,6 +14,11 @@ const isLocalRequest = (request: IncomingMessage, websocket: boolean) => {
     && (site === undefined || site === 'same-origin' || site === 'none');
 };
 
+const upstreamHeaders = new Set([
+  'host', 'origin', 'accept', 'connection', 'upgrade', 'sec-websocket-key',
+  'sec-websocket-version', 'sec-websocket-extensions',
+]);
+
 const cvProxy = (websocket: boolean, apiKey: string): ProxyOptions => ({
   target: 'http://127.0.0.1:8000',
   ws: websocket,
@@ -21,11 +26,15 @@ const cvProxy = (websocket: boolean, apiKey: string): ProxyOptions => ({
   bypass: (request, response) => {
     const allowed = response === undefined ? websocket : !websocket;
     if (!apiKey || !allowed || !isLocalRequest(request, websocket)) return false;
+
+    const headers = request.headers;
+    if (headers['transfer-encoding'] || (headers['content-length'] && headers['content-length'] !== '0')) return false;
+    for (const name of Object.keys(headers)) {
+      if (!upstreamHeaders.has(name)) delete headers[name];
+    }
   },
   configure: (proxy) => {
-    const attachKey = (request: ClientRequest) => {
-      request.setHeader('x-api-key', apiKey);
-    };
+    const attachKey = (request: ClientRequest) => request.setHeader('x-api-key', apiKey);
     proxy.on(websocket ? 'proxyReqWs' : 'proxyReq', attachKey);
   },
 });

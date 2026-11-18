@@ -103,16 +103,17 @@ def read_frame(packet: bytes) -> Frame:
     return Frame(stream_id, frame_id, float(timestamp), width, height, packet[jpeg_offset:])
 
 
-def validate_jpeg(frame: Frame) -> bool:
+def decode_jpeg(frame: Frame) -> Image.Image | None:
     if not frame.jpeg.startswith(b"\xff\xd8") or not frame.jpeg.endswith(b"\xff\xd9"):
-        return False
+        return None
 
     try:
         with Image.open(BytesIO(frame.jpeg), formats=("JPEG",)) as image:
-            if image.size != (frame.width, frame.height):
-                return False
-            image.load()
-    except (OSError, ValueError, SyntaxError, Image.DecompressionBombError):
-        return False
+            if getattr(image, "n_frames", 1) != 1:
+                return None
+            if image.format != "JPEG" or image.size != (frame.width, frame.height):
+                return None
 
-    return True
+            return image.convert("RGB")
+    except (OSError, ValueError, SyntaxError, Image.DecompressionBombError):
+        return None

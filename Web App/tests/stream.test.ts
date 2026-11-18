@@ -212,6 +212,40 @@ test("failed health never opens a socket; successful health allows connection", 
   assert.equal(sockets, 1);
 });
 
+test("three consecutive correlated rejections stop capture and success resets the count", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const peer = makeSocket();
+  const states: StreamStatus[] = [];
+  let captures = 0;
+  const client = createFrameStream({
+    url: "ws://localhost/api/v1/stream", createSocket: () => peer.socket,
+    capture: async () => makeFrame(++captures), onStatus: (state) => states.push(state),
+  });
+  t.after(client.stop);
+  peer.start();
+  const start = JSON.parse(String(peer.sent[0]));
+  const rejectFrame = (frameId: number) => peer.receive({
+    type: "stream:error", code: "INVALID_FRAME", message: "Rejected.", fatal: false, streamId: "test-stream", frameId,
+  });
+
+  for (let frameId = 1; frameId <= 6; frameId++) {
+    t.mock.timers.tick(100);
+    await Promise.resolve();
+    assert.equal(captures, frameId);
+    rejectFrame(frameId + 100);
+    if (frameId === 3) {
+      const receipt = start.protocolVersion === 1 ? { type: "frame:ack" } : { type: "tracking:result", hands: [] };
+      peer.receive({ ...receipt, streamId: "test-stream", frameId });
+    } else {
+      rejectFrame(frameId);
+    }
+  }
+  assert.equal(states.at(-1)?.phase, "error");
+  assert.equal(peer.socket.readyState, 3);
+  t.mock.timers.tick(10000);
+  assert.equal(captures, 6);
+});
+
 test("a stalled health check times out and ignores late success", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   let healthy: (() => void) | undefined;

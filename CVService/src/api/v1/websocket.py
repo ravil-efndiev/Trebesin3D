@@ -3,14 +3,14 @@ from time import monotonic
 from uuid import uuid4
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from starlette.concurrency import run_in_threadpool
 
-from .protocol import MAX_TEXT_BYTES, ProtocolError, is_id, is_version, parse_object, read_frame, validate_jpeg
+from .protocol import MAX_TEXT_BYTES, ProtocolError, is_id, is_version, parse_object, read_frame, decode_jpeg
 
 
 stream_router = APIRouter()
 START_TIMEOUT = 3
 IDLE_TIMEOUT = 20
+FRAME_TIMEOUT = 2
 SEND_TIMEOUT = 0.5
 MESSAGES_PER_SECOND = 20
 MESSAGE_BURST = 4
@@ -38,6 +38,7 @@ async def stream_endpoint(websocket: WebSocket):
         return
 
     await slots.acquire()
+    pending_decode = None
     stream_id = None
     last_frame_id = 0
     last_timestamp = -1.0
@@ -117,10 +118,17 @@ async def stream_endpoint(websocket: WebSocket):
             last_timestamp = frame.captured_at_ms
             response_ids = {"streamId": stream_id, "frameId": frame.frame_id}
 
-            # Serial processing uses one worker per connection at most. The connection cap bounds global decode work.
-            valid = await run_in_threadpool(validate_jpeg, frame)
+            pending_decode = asyncio.get_running_loop().run_in_executor(None, decode_jpeg, frame)
+            try:
+                image = await asyncio.wait_for(asyncio.shield(pending_decode), FRAME_TIMEOUT)
+            except TimeoutError:
+                await send_error(websocket, "FRAME_TIMEOUT", "Frame processing timed out.", fatal=True, **response_ids)
+                return
+
+            pending_decode = None
             del frame, packet
-            if valid:
+            if image is not None:
+                image.close()
                 await send_json(websocket, {"type": "frame:ack", **response_ids})
             else:
                 await send_error(websocket, "INVALID_FRAME", "JPEG validation failed.", fatal=False, **response_ids)
@@ -138,4 +146,18 @@ async def stream_endpoint(websocket: WebSocket):
     except (WebSocketDisconnect, OSError):
         pass
     finally:
-        slots.release()
+        if pending_decode is None:
+            slots.release()
+        else:
+            # A timeout or disconnect cannot interrupt a native decode.
+            def release_after_decode(worker):
+                try:
+                    if worker.cancelled() or worker.exception() is not None:
+                        return
+                    image = worker.result()
+                    if image is not None:
+                        image.close()
+                finally:
+                    slots.release()
+
+            pending_decode.add_done_callback(release_after_decode)
