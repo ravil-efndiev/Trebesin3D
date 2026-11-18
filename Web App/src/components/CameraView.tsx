@@ -2,7 +2,8 @@ import Webcam from "react-webcam";
 import { useCameraStream } from "../hooks/useCameraStream.ts";
 import { config } from "../utils/config.ts";
 
-const streamUrl = import.meta.env.VITE_CV_STREAM_URL || config.defaultStreamUrl;
+const socketProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+const streamUrl = import.meta.env.VITE_CV_STREAM_URL || `${socketProtocol}//${window.location.host}${config.streamPath}`;
 const videoConstraints = {
   width: { ideal: config.maxFrameWidth },
   height: { ideal: config.maxFrameHeight },

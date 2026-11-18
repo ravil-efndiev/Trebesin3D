@@ -1,6 +1,6 @@
 export const config = {
-  defaultApiUrl: "http://localhost:8000/api",
-  defaultStreamUrl: "ws://localhost:8000/api/v1/stream",
+  defaultApiUrl: "/api",
+  streamPath: "/api/v1/stream",
   frameIntervalMs: 1000 / 15,
   frameTimeoutMs: 2000,
   connectionTimeoutMs: 3000,

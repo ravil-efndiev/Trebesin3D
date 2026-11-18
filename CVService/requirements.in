@@ -1,6 +1,8 @@
 # Direct runtime dependencies; install exact versions from requirements.lock.
 fastapi==0.163.1
 uvicorn==0.54.0
+websockets==17.4
 mediapipe==1.2.3
 numpy==2.5.4
 opencv-contrib-python==5.0.0.93
+pillow==13.0.0

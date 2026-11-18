@@ -1,0 +1,20 @@
+# Streaming audit follow-up
+
+## Findings
+
+- [ ] **P2 · Strip browser credentials at the Vite proxy.** The proxy copies inbound headers and replaces only `x-api-key`. Remove browser cookies and authorization headers from both the upstream health request and WebSocket upgrade. Preserve the service key and required handshake headers. [Proxy](../Web%20App/vite.config.ts)
+- [ ] **P2 · Bound frame processing time.** JPEG decoding holds a stream slot until the worker returns and delays handling Stop or disconnect. Set a server-side processing deadline before adding inference. Keep capacity reserved until underlying work exits. Test delayed processing, disconnect, and subsequent admission. [Stream handler](../CVService/src/api/v1/websocket.py)
+- [ ] **P2 · Enforce a single JPEG per frame.** The validator accepted a generated two-picture MPO file even though Pillow identified it as MPO. Check the detected format and frame count before loading pixels. Add regression coverage for MPO rejection and ordinary JPEG acceptance. [JPEG validator](../CVService/src/api/v1/protocol.py)
+- [ ] **P2 · Stop after sustained frame rejection.** Each recoverable rejection schedules another capture, so a stream with zero accepted frames can keep the camera transmitting indefinitely. Bound consecutive rejections, reset the count on acknowledgment, and stop camera use with an actionable message when the limit is reached. [Browser stream](../Web%20App/src/utils/stream.ts)
+- [ ] **P3 · Handle slow WebSocket closes.** A simulated transport delay caused timeout cleanup to close an already-disconnected Starlette socket and raise `WebSocketDisconnected`. The slot was released. Give one path ownership of closing and test delayed close. [Stream handler](../CVService/src/api/v1/websocket.py)
+- [ ] **P3 · Validate the Vite proxy key at startup.** Vite currently starts with a missing key and returns a 404 for the health request. Report missing or invalid configuration in the development terminal. Keep production builds independent of the key. [Vite configuration](../Web%20App/vite.config.ts)
+- [ ] **Dependency · Track the picomatch advisory.** The audit found one high-severity advisory on locked `picomatch@4.0.7`, propagated through five development-package entries. The audit found no untrusted glob input in the streaming routes and no findings in the production-only npm audit. Track the upstream fix, review a compatible tooling update, and rerun the audit. [GitHub advisory](https://github.com/advisories/GHSA-fc5q-39xc-vjpf)
+
+## Test gaps and release requirements
+
+- [ ] **Automate tests at the Vite proxy boundary.** Cover health and WebSocket forwarding, Host and Origin checks, and upstream credential handling. The Python suite currently connects directly to CVService. [Proxy](../Web%20App/vite.config.ts)
+- [ ] **Strengthen the malformed-JPEG test.** Assert the full nonfatal `INVALID_FRAME` response. The current check for `frameId` also passes on an incorrect acknowledgment. [Service tests](../CVService/tests/test_streaming.py)
+- [ ] **Verify transport limits using the service launcher.** Cover message rate, start and idle expiry, slow sends, and capacity recovery during processing. Exercise or share the launcher settings so duplicated test configuration cannot drift. [Launcher](../CVService/src/__main__.py)
+- [ ] **Migrate the deprecated Uvicorn WebSocket backend.** Verify equivalent message-size and receive-queue bounds and keep compression disabled through the migration. [Launcher](../CVService/src/__main__.py)
+- [ ] **Gate public access.** Add HTTPS/WSS, short-lived client admission, and limits shared across connections and workers. The service key authenticates Vite to CVService, and the four-slot limit applies per process. Verify sustained load before release. [Streaming contract](streaming-protocol.md)
+- [ ] **Verify physical camera behavior and future inference.** The audit tested generated video over the real connection. Exercise actual hardware and validate inference when it is implemented.
