@@ -10,7 +10,7 @@ const videoConstraints = {
 };
 
 const CameraView = () => {
-  const { webcamRef, enabled, status, start, stop, onUserMedia, onUserMediaError } = useCameraStream(streamUrl);
+  const { webcamRef, overlayRef, enabled, status, start, stop, onUserMedia, onUserMediaError } = useCameraStream(streamUrl);
 
   return (
     <section className="mt-6 max-w-lg space-y-3" aria-label="Camera streaming">
@@ -37,16 +37,19 @@ const CameraView = () => {
       </div>
       <p role="status" aria-live="polite">{ status.message }</p>
       {enabled && (
-        <Webcam
-          ref={ webcamRef }
-          audio={ false }
-          mirrored={ false }
-          videoConstraints={ videoConstraints }
-          onUserMedia={ onUserMedia }
-          onUserMediaError={ onUserMediaError }
-          className="w-full rounded"
-          aria-label="Unmirrored camera preview"
-        />
+        <div className="relative overflow-hidden rounded">
+          <Webcam
+            ref={ webcamRef }
+            audio={ false }
+            mirrored={ false }
+            videoConstraints={ videoConstraints }
+            onUserMedia={ onUserMedia }
+            onUserMediaError={ onUserMediaError }
+            className="block h-auto w-full"
+            aria-label="Unmirrored camera preview"
+          />
+          <canvas ref={ overlayRef } aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full" />
+        </div>
       )}
     </section>
   );

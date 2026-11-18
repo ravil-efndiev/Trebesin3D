@@ -12,7 +12,7 @@ export interface CapturedFrame {
 
 export interface FrameHeader {
   type: "stream:frame";
-  protocolVersion: 1;
+  protocolVersion: 2;
   streamId: string;
   frameId: number;
   capturedAtMs: number;
@@ -21,10 +21,20 @@ export interface FrameHeader {
   mimeType: "image/jpeg";
 }
 
+export interface HandObservation {
+  landmarks: [number, number, number][];
+}
+
+export interface TrackingSample {
+  hands: HandObservation[];
+  width: number;
+  height: number;
+}
+
 export type ServerMessage =
-  | { type: "stream:started"; requestId: string; protocolVersion: 1; streamId: string }
+  | { type: "stream:started"; requestId: string; protocolVersion: 2; streamId: string }
   | { type: "stream:stopped"; requestId: string; streamId: string }
-  | { type: "frame:ack"; streamId: string; frameId: number }
+  | { type: "tracking:result"; streamId: string; frameId: number; hands: HandObservation[] }
   | {
       type: "stream:error";
       code: string;
@@ -50,6 +60,7 @@ export interface StreamOptions {
   url: string;
   capture: (signal: AbortSignal) => Promise<CapturedFrame | null>;
   onStatus: (status: StreamStatus) => void;
+  onTracking?: (sample: TrackingSample | null) => void;
   createSocket?: (url: string) => StreamSocket;
   checkHealth?: (signal: AbortSignal) => Promise<void>;
 }

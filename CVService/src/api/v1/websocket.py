@@ -3,9 +3,9 @@ from time import monotonic
 from uuid import uuid4
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from starlette.concurrency import run_in_threadpool
 
-from .protocol import MAX_TEXT_BYTES, ProtocolError, is_id, is_version, parse_object, read_frame, validate_jpeg
+from ...tracking import HandTracker
+from .protocol import MAX_TEXT_BYTES, Frame, ProtocolError, decode_jpeg, is_id, is_version, parse_object, read_frame
 
 
 stream_router = APIRouter()
@@ -14,6 +14,31 @@ IDLE_TIMEOUT = 20
 SEND_TIMEOUT = 0.5
 MESSAGES_PER_SECOND = 20
 MESSAGE_BURST = 4
+FRAME_TIMEOUT = 2
+
+
+class StreamProcessor:
+    def __init__(self):
+        self.tracker = None
+
+    def start_tracking(self):
+        self.tracker = HandTracker()
+
+    def process(self, frame: Frame):
+        image = decode_jpeg(frame)
+        if image is None:
+            return None
+
+        with image:
+            if self.tracker is None:
+                return {"type": "frame:ack"}
+
+            return {"type": "tracking:result", "hands": self.tracker.detect(image)}
+
+    def close(self):
+        if self.tracker is not None:
+            self.tracker.close()
+            self.tracker = None
 
 
 async def send_json(websocket: WebSocket, message: dict):
@@ -38,11 +63,32 @@ async def stream_endpoint(websocket: WebSocket):
         return
 
     await slots.acquire()
+    processor = StreamProcessor()
+    pending = None
+    version = 1
     stream_id = None
     last_frame_id = 0
     last_timestamp = -1.0
     tokens = MESSAGE_BURST
     updated_at = monotonic()
+
+    async def run_worker(operation, timeout, *args):
+        nonlocal pending
+        pending = asyncio.create_task(asyncio.to_thread(operation, *args))
+        # Closing the socket cannot interrupt native inference. Keep the slot until it exits.
+        try:
+            return await asyncio.wait_for(asyncio.shield(pending), timeout)
+        finally:
+            if pending.done():
+                pending = None
+
+    async def release_slot():
+        try:
+            if pending is not None:
+                await asyncio.gather(pending, return_exceptions=True)
+            await asyncio.to_thread(processor.close)
+        finally:
+            slots.release()
 
     try:
         await asyncio.wait_for(websocket.accept(), SEND_TIMEOUT)
@@ -77,11 +123,22 @@ async def stream_endpoint(websocket: WebSocket):
                     and control["type"] == "stream:start"
                     and is_version(control["protocolVersion"])
                 ):
+                    version = int(control["protocolVersion"])
+                    if version == 2:
+                        try:
+                            await run_worker(processor.start_tracking, START_TIMEOUT)
+                        except Exception:
+                            await send_error(
+                                websocket, "TRACKER_UNAVAILABLE", "Hand tracker unavailable. Check the model setup.",
+                                fatal=True, requestId=request_id,
+                            )
+                            return
+
                     stream_id = str(uuid4())
                     last_frame_id = 0
                     last_timestamp = -1.0
                     await send_json(websocket, {
-                        "type": "stream:started", "requestId": request_id, "protocolVersion": 1, "streamId": stream_id
+                        "type": "stream:started", "requestId": request_id, "protocolVersion": version, "streamId": stream_id
                     })
                 elif (
                     stream_id is not None
@@ -89,6 +146,7 @@ async def stream_endpoint(websocket: WebSocket):
                     and control["type"] == "stream:stop"
                     and control["streamId"] == stream_id
                 ):
+                    await run_worker(processor.close, START_TIMEOUT)
                     stopped_id = stream_id
                     stream_id = None
                     await send_json(websocket, {
@@ -104,7 +162,7 @@ async def stream_endpoint(websocket: WebSocket):
             if stream_id is None:
                 raise ProtocolError("Frame received before stream start.")
 
-            frame = read_frame(packet["bytes"])
+            frame = read_frame(packet["bytes"], version)
             if (
                 frame.stream_id != stream_id
                 or (last_frame_id == 0 and frame.frame_id != 1)
@@ -117,11 +175,18 @@ async def stream_endpoint(websocket: WebSocket):
             last_timestamp = frame.captured_at_ms
             response_ids = {"streamId": stream_id, "frameId": frame.frame_id}
 
-            # Serial processing uses one worker per connection at most. The connection cap bounds global decode work.
-            valid = await run_in_threadpool(validate_jpeg, frame)
+            try:
+                result = await run_worker(processor.process, FRAME_TIMEOUT, frame)
+            except TimeoutError:
+                await send_error(websocket, "FRAME_TIMEOUT", "Frame processing timed out.", fatal=True, **response_ids)
+                return
+            except Exception:
+                await send_error(websocket, "TRACKING_FAILED", "Frame processing failed.", fatal=True, **response_ids)
+                return
+
             del frame, packet
-            if valid:
-                await send_json(websocket, {"type": "frame:ack", **response_ids})
+            if result is not None:
+                await send_json(websocket, {**result, **response_ids})
             else:
                 await send_error(websocket, "INVALID_FRAME", "JPEG validation failed.", fatal=False, **response_ids)
 
@@ -138,4 +203,4 @@ async def stream_endpoint(websocket: WebSocket):
     except (WebSocketDisconnect, OSError):
         pass
     finally:
-        slots.release()
+        await asyncio.shield(release_slot())

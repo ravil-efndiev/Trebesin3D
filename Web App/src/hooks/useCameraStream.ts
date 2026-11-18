@@ -2,11 +2,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type Webcam from "react-webcam";
 import { checkServiceHealth } from "../utils/api.ts";
 import { createFrameCapture, stopMediaTracks } from "../utils/camera.ts";
+import { drawHandOverlay } from "../utils/handOverlay.ts";
 import { validateStreamUrl } from "../utils/protocol.ts";
 import { createFrameStream } from "../utils/stream.ts";
 import type { StreamStatus } from "../utils/types.ts";
 
 export const useCameraStream = (url: string) => {
+  const overlayRef = useRef<HTMLCanvasElement>(null);
   const webcamRef = useRef<Webcam>(null);
   const mediaRef = useRef<MediaStream | null>(null);
   const clientRef = useRef<ReturnType<typeof createFrameStream> | null>(null);
@@ -112,6 +114,7 @@ export const useCameraStream = (url: string) => {
       url: validateStreamUrl(url, window.location.protocol),
       capture: createFrameCapture(() => webcamRef.current?.video ?? null),
       onStatus: reportStatus,
+      onTracking: (sample) => drawHandOverlay(overlayRef.current, sample),
       checkHealth: (signal) => checkServiceHealth(url, signal),
     });
     clientRef.current = client;
@@ -129,5 +132,5 @@ export const useCameraStream = (url: string) => {
     releaseMedia();
   }, [releaseMedia]);
 
-  return { webcamRef, enabled, status, start, stop, onUserMedia, onUserMediaError };
+  return { webcamRef, overlayRef, enabled, status, start, stop, onUserMedia, onUserMediaError };
 };
