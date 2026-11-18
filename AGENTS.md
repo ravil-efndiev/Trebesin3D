@@ -21,10 +21,39 @@ Security and bounded resource use apply at every stage. A separate application b
 - Keep the scaffold minimal. Add modules, folders, dependencies, infrastructure, and abstractions only when the current feature requires them.
 - Preserve user changes. Inspect Git status and the diff before editing and committing. Do not reset, discard, or stage unrelated work.
 - Run checks appropriate to the change and report their actual results and any verification limits. Never claim a camera, inference, performance, or security check passed without running it.
-- After a successful feature/fix, make a focused Git commit containing that work and relevant documentation. Do not commit failing or unverified work as successful. If Git is not initialized, establish the repository as part of an authorized setup task; never invent a remote or push without authorization.
-- Use clear commit messages such as `feat(cv): ...`, `fix(web): ...`, or `chore: ...`.
+- Staging and committing are the user's responsibilities. Do not stage changes or create commits unless the user explicitly requests the respective action. A request to implement, fix, verify, or finish work does not authorize staging or committing. An explicit request to commit authorizes staging only the changes needed for that commit. When a commit is requested, keep it focused on the requested work and relevant documentation; do not commit failing or unverified work as successful. If Git is not initialized, establish the repository as part of an authorized setup task; never invent a remote or push without authorization.
+- Follow the mandatory code style and commit message conventions below.
 - Update README setup commands, dependency locks, and protocol documentation when behavior changes. Record consequential architecture decisions in repository documentation when needed.
 - Delegate UI work only when requested. Give UI agents explicit scope, mock tracking inputs, and established contracts; they must preserve the transport and performance requirements.
+
+## Mandatory code style and commit message conventions
+
+The following rules incorporate the supplied `Conventions.md`. Apply them strictly to code you add or modify and to commits you create. Do not reformat unrelated code to enforce them.
+
+### TypeScript and React
+
+- Use `camelCase` for variables, functions, and other ordinary identifiers. Use `PascalCase` for type, interface, and React component names.
+- Define functions, including React components, as arrow functions; do not use function declarations or function expressions with the `function` keyword.
+- Use semicolons wherever TypeScript permits a statement terminator.
+- Use spaces inside inline curly braces, for example `{ data }`.
+- Indent with two spaces per level; do not use tab characters for code indentation.
+- Name a component's props interface `Props`, not a component-prefixed name such as `ArrowIconProps`. Declare props with `interface`, never a `type` alias.
+- When a file has a default export, place it in a separate statement at the end of the file, for example `export default ArrowIcon;`. Do not combine the component definition and default export.
+
+### Python
+
+- Use `snake_case` for variables, functions, and other ordinary identifiers. Use `PascalCase` for type and class names.
+- Separate logical steps in dense code blocks with blank lines to improve readability, for example between initialization, conditional processing, and the return statement.
+
+### Commit messages
+
+- Describe all major changes in clear, concise language. Omit minor implementation details; use only as much text as needed to describe the work accurately.
+- For a new feature or an update to an existing feature, use `feat(feature name):`. For a fix, use `fix(feature name):`; the scope may be empty, as in `fix():`.
+- For multiple major changes, put the prefix on its own line and list the details on subsequent lines. Start each detail with exactly one tab character followed by `- `.
+- For a single statement, put the description on the same line after the prefix's colon and one space, for example `fix(camera): stop tracks on disconnect`. Use a colon as shown in the source examples; the source's reference to a semicolon means this prefix delimiter.
+- Use `misc:` for minor changes unrelated to the broader scope of a larger commit. This does not override the requirement to keep commits focused and exclude unrelated user changes.
+- A small commit may instead use one descriptive sentence without a prefix.
+- Include a `todo:` line only when relevant unfinished work needs to be recorded; it is not a required part of a commit message.
 
 ## Repository and environments
 
@@ -46,7 +75,7 @@ Security and bounded resource use apply at every stage. A separate application b
 - Python owns image validation, decoding, inference, temporal tracking state, and documented hand/gesture observations. The frontend owns scene-specific gesture-to-action mapping, raycasting, selection, and transforms. Keep a single authoritative implementation of each gesture rule.
 - Use MediaPipe Tasks Hand Landmarker for new tracking work. Keep inference behind a small adapter so it can be exercised without networking.
 - The frontend stack is React, TypeScript, and Vite. Add Three.js, React Three Fiber, and selected Drei helpers when scene work begins; choose compatible stable versions.
-- The project overview selects Socket.IO. Socket.IO is not the native WebSocket protocol: use compatible `socket.io-client` and Python `python-socketio` ASGI integration with FastAPI when implementing transport. Prefer WebSocket-only transport for image streaming and configure both peers consistently. Do not silently mix a Socket.IO client with a plain FastAPI WebSocket endpoint. Any transport change needs an explicit documented decision.
+- Use native WebSockets for image streaming: the browser's built-in `WebSocket` API connects directly to a FastAPI WebSocket endpoint. This decision supersedes the project overview's Socket.IO choice to simplify Python integration. Do not add `socket.io-client`, `python-socketio`, or the Socket.IO/Engine.IO protocols. Keep HTTP routes in FastAPI. Any future transport change needs an explicit documented decision.
 - The portfolio must remain usable through mouse/keyboard and suitable touch controls when camera permission is denied, tracking is lost, or CVService is unavailable.
 
 ## Streaming contract and performance
@@ -54,6 +83,7 @@ Security and bounded resource use apply at every stage. A separate application b
 - Version and document the protocol before transport implementation. Define control messages, image framing, limits, frame IDs, timestamps, results, errors, stop behavior, and coordinate/mirroring conventions. Validate incoming data at both ends.
 - Send compressed binary images, initially JPEG. Avoid base64 images in JSON. Return compact results, initially JSON, and an explicit empty-hand result when detection succeeds without a hand.
 - Start with one frame in flight per client and an explicit result/rejection timeout. Bound receive, processing, and outgoing queues, including transport-library buffers. Drop obsolete work rather than growing a latency backlog. Enforce limits server-side even if the client misbehaves.
+- Implement connection liveness checks and bounded reconnect backoff with jitter. After reconnecting, start a fresh stream with fresh temporal tracking state; discard obsolete frames and results rather than replaying them. Define these behaviors in the streaming protocol.
 - Start near 640x480 and 15 tracking samples per second, then benchmark. These are tunable starting points, not guaranteed throughput. Keep capture/inference cadence independent of render cadence.
 - Decode and run blocking inference outside FastAPI's event loop using bounded execution. Own stateful trackers per stream; never feed unrelated streams through the same temporal tracker. Reuse model instances within their lifecycle.
 - Use strictly increasing inference timestamps. VIDEO mode is the initial baseline; LIVE_STREAM may drop submissions, so never assume one callback per submitted frame in that mode.
@@ -68,7 +98,7 @@ Security and bounded resource use apply at every stage. A separate application b
 
 ## Security and privacy
 
-- Default development servers to loopback. Public operation requires HTTPS/WSS and explicit trusted origins. Validate Socket.IO/WebSocket origins independently of HTTP CORS; origin checks are not authentication.
+- Default development servers to loopback. Public operation requires HTTPS/WSS and explicit trusted origins. Validate WebSocket origins independently of HTTP CORS; origin checks are not authentication.
 - Before public CV exposure, implement short-lived session admission, expiry, connection/session limits, rate limits, and global inference capacity. Do not embed service secrets or permanent API keys in frontend code or Vite environment variables.
 - Validate message type/schema, encoded bytes, actual image dimensions, decoded pixel count, codec, and timestamps. Reject malformed/oversized input before expensive inference; configure transport/decode limits and slow-client timeouts.
 - Camera use is opt-in, with visible start/stop controls and clear disclosure if frames leave the device. Process frames in memory; do not record frames or log raw images, full payloads, credentials, or sensitive landmarks by default.
@@ -83,4 +113,4 @@ Security and bounded resource use apply at every stage. A separate application b
 - Add meaningful unit/integration tests with behavior: protocol validation, deterministic gesture sequences, coordinate mapping, cleanup, session isolation, connection recovery, malformed frames, limits, and slow consumers. Do not add tests that merely restate trivial scaffold code.
 - Keep deterministic landmark fixtures for UI work so a live camera/service is not required for every change. Do not commit private camera footage.
 - Use representative performance sessions for frame-rate claims; a successful production build is not an FPS benchmark. Add load and abuse validation before public release.
-- Report what changed, checks run, remaining limitations, and the commit ID. Never claim scaffolding implements tracking, transport, security hardening, or the 3D scene.
+- Report what changed, checks run, and remaining limitations. Include a commit ID only if a commit was explicitly requested and created. Never claim scaffolding implements tracking, transport, security hardening, or the 3D scene.

@@ -1,20 +1,24 @@
-:root {
-  font-family: system-ui, sans-serif;
-  line-height: 1.5;
-  color: #e9e7ff;
-  background: #111126;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-}
+@import "tailwindcss";
 
-body {
-  margin: 0;
-  min-width: 320px;
-}
+@layer base {
+  :root {
+    font-family: system-ui, sans-serif;
+    line-height: 1.5;
+    color: #e9e7ff;
+    background: #111126;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
 
-main {
-  max-width: 64rem;
-  margin: 0 auto;
-  padding: 2rem;
+  body {
+    margin: 0;
+    min-width: 320px;
+  }
+
+  main {
+    max-width: 64rem;
+    margin: 0 auto;
+    padding: 2rem;
+  }
 }
