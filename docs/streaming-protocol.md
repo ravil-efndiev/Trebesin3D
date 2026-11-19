@@ -12,6 +12,8 @@ The camera preview uses protocol v2 for hand tracking. The same endpoint accepts
 - Client sends `{"type":"stream:stop","requestId":"<UUID>","streamId":"<active ID>"}` on stop where the socket is writable, then closes the connection without waiting. Server may respond `{"type":"stream:stopped","requestId":"<same>","streamId":"<same>"}`. Disconnect must perform the same cleanup even if stop was never received. Stop is best effort; the UI stops capture immediately.
 - Hiding the page closes its current stream and cancels pending capture. The camera remains enabled while hidden, but no frames are transmitted. Returning to the page creates a fresh stream. Stop/unmount/camera failure releases media tracks, timers, and connections. Late encodes and messages from previous connections are ignored.
 
+The development proxy forwards only the headers needed for HTTP and WebSocket negotiation and injects its own service key. The browser stops capture after three consecutive correlated frame rejections. A matching successful frame response resets the count.
+
 ## Binary frame message
 
 One WebSocket message contains:
@@ -51,6 +53,7 @@ Errors use:
 ```
 
 - `code`: 1–64 characters; `message`: 1–256 characters; `fatal`: boolean. Optional fields: `requestId`, `streamId`, `frameId` (same constraints as their request counterparts).
+- Only single-image JPEG input is supported. A two-second server processing deadline closes the stream with a fatal `FRAME_TIMEOUT` error. The service retains capacity until the worker finishes.
 - A nonfatal JPEG rejection uses `INVALID_FRAME` and includes the active stream ID and frame ID. Invalid metadata, malformed messages, and stream ownership or ordering errors are fatal. Invalid controls echo the request ID when it can be validated. The server closes with code 1008 after a fatal error. An oversized message closes with code 1009.
 - Responses must be text JSON, maximum 4096 UTF-8 bytes. Invalid messages close the connection and end camera use, rather than silently falling back to another protocol.
 

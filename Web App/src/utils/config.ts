@@ -9,6 +9,7 @@ export const config = {
   maxFrameWidth: 640,
   maxFrameHeight: 480,
   maxJpegBytes: 256 * 1024,
+  maxConsecutiveRejections: 3,
   maxHeaderBytes: 1024,
   maxResponseBytes: 4096,
   maxRetries: 5,

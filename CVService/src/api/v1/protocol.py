@@ -111,6 +111,8 @@ def decode_jpeg(frame: Frame) -> Image.Image | None:
 
     try:
         with Image.open(BytesIO(frame.jpeg), formats=("JPEG",)) as image:
+            if getattr(image, "n_frames", 1) != 1:
+                return None
             if image.format != "JPEG" or image.size != (frame.width, frame.height):
                 return None
 

@@ -89,6 +89,66 @@ class StreamingTests(unittest.TestCase):
         })
         return stream_id
 
+    def test_single_jpeg_required_for_receipt(self):
+        with Image.new("RGB", (16, 12)) as picture, BytesIO() as buffer, self.websocket() as ws:
+            picture.save(buffer, format="MPO", save_all=True, append_images=[picture])
+            stream = self.start_stream(ws)
+            ws.send(packet(stream, jpeg=buffer.getvalue()))
+            self.assertEqual(json.loads(ws.recv(timeout=2)), {
+                "type": "stream:error", "code": "INVALID_FRAME", "message": "JPEG validation failed.",
+                "fatal": False, "streamId": stream, "frameId": 1,
+            })
+            ws.send(packet(stream, 2))
+            self.assertEqual(json.loads(ws.recv(timeout=2)), {"type": "frame:ack", "streamId": stream, "frameId": 2})
+
+    def test_timed_out_decode_retains_slot_until_worker_exits(self):
+        self.check_decode_capacity(disconnect_early=False)
+
+    def test_disconnect_during_decode_retains_slot_until_worker_exits(self):
+        self.check_decode_capacity(disconnect_early=True)
+
+    def check_decode_capacity(self, *, disconnect_early):
+        entered = threading.Event()
+        finish = threading.Event()
+        convert = Image.Image.convert
+
+        def delayed_decode(image, *args, **kwargs):
+            entered.set()
+            finish.wait(timeout=5)
+            return convert(image, *args, **kwargs)
+
+        with ExitStack() as clients:
+            for _ in range(3):
+                clients.enter_context(self.websocket())
+
+            with patch("src.api.v1.websocket.FRAME_TIMEOUT", 0.1), patch.object(Image.Image, "convert", delayed_decode):
+                try:
+                    with self.websocket() as ws:
+                        stream = self.start_stream(ws)
+                        ws.send(packet(stream))
+                        self.assertTrue(entered.wait(timeout=1))
+                        if not disconnect_early:
+                            response = json.loads(ws.recv(timeout=1))
+                            self.assertEqual(response, {
+                                "type": "stream:error", "code": "FRAME_TIMEOUT", "message": "Frame processing timed out.",
+                                "fatal": True, "streamId": stream, "frameId": 1,
+                            })
+                    with self.assertRaises(InvalidStatus):
+                        self.websocket()
+                finally:
+                    finish.set()
+
+            deadline = time.monotonic() + 1
+            while True:
+                try:
+                    with self.websocket() as ws:
+                        self.start_stream(ws)
+                    break
+                except InvalidStatus:
+                    if time.monotonic() >= deadline:
+                        raise
+                    time.sleep(0.01)
+
     def test_health_requires_key_and_allows_trusted_preflight(self):
         with self.health(headers={"Origin": ORIGIN, "x-api-key": self.key}) as response:
             self.assertEqual(response.status, 200)

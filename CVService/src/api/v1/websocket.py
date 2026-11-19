@@ -11,6 +11,7 @@ from .protocol import MAX_TEXT_BYTES, Frame, ProtocolError, decode_jpeg, is_id, 
 stream_router = APIRouter()
 START_TIMEOUT = 3
 IDLE_TIMEOUT = 20
+FRAME_TIMEOUT = 2
 SEND_TIMEOUT = 0.5
 MESSAGES_PER_SECOND = 20
 MESSAGE_BURST = 4
