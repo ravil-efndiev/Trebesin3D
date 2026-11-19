@@ -7,6 +7,15 @@ const isId = (value: unknown): value is string =>
 const isFrameId = (value: unknown): value is number =>
   typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 
+const isHand = (value: unknown): boolean => {
+  if (!value || typeof value !== "object" || Object.keys(value).length !== 1 || !("landmarks" in value)) return false;
+
+  const points = value.landmarks;
+  return Array.isArray(points) && points.length === 21 && points.every((point) =>
+    Array.isArray(point) && point.length === 3 && point.every((n) => Number.isFinite(n) && Math.abs(n) <= 8)
+  );
+};
+
 export const validateStreamUrl = (value: string, pageProtocol: string): string => {
   const url = new URL(value);
 
@@ -39,15 +48,16 @@ export const parseServerMessage = (data: unknown): ServerMessage => {
   switch (record.type) {
     case "stream:started":
       keys = ["type", "requestId", "protocolVersion", "streamId"];
-      valid = isId(record.requestId) && isId(record.streamId) && record.protocolVersion === 1;
+      valid = isId(record.requestId) && isId(record.streamId) && record.protocolVersion === 2;
       break;
     case "stream:stopped":
       keys = ["type", "requestId", "streamId"];
       valid = isId(record.requestId) && isId(record.streamId);
       break;
-    case "frame:ack":
-      keys = ["type", "streamId", "frameId"];
-      valid = isId(record.streamId) && isFrameId(record.frameId);
+    case "tracking:result":
+      keys = ["type", "streamId", "frameId", "hands"];
+      valid = isId(record.streamId) && isFrameId(record.frameId)
+        && Array.isArray(record.hands) && record.hands.length <= 2 && record.hands.every(isHand);
       break;
     case "stream:error":
       keys = ["type", "code", "message", "fatal", "requestId", "streamId", "frameId"];
@@ -61,7 +71,7 @@ export const parseServerMessage = (data: unknown): ServerMessage => {
   }
 
   if (!valid || Object.keys(record).some((key) => !keys.includes(key))) {
-    throw new Error("CV service response does not match streaming protocol v1.");
+    throw new Error("CV service response does not match streaming protocol v2.");
   }
 
   return record as unknown as ServerMessage;
@@ -80,7 +90,7 @@ export const createFramePacket = (frame: CapturedFrame, streamId: string, frameI
 
   const header: FrameHeader = {
     type: "stream:frame",
-    protocolVersion: 1,
+    protocolVersion: 2,
     streamId,
     frameId,
     capturedAtMs: frame.capturedAtMs,

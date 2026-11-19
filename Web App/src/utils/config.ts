@@ -2,6 +2,7 @@ export const config = {
   defaultApiUrl: "/api",
   streamPath: "/api/v1/stream",
   frameIntervalMs: 1000 / 15,
+  trackingMaxAgeMs: 200,
   frameTimeoutMs: 2000,
   connectionTimeoutMs: 3000,
   mediaReadyTimeoutMs: 15000,

@@ -2,7 +2,7 @@ import { config } from "./config.ts";
 import { createFramePacket, parseServerMessage } from "./protocol.ts";
 import type { StreamOptions, StreamSocket } from "./types.ts";
 
-export const createFrameStream = ({ url, capture, onStatus, checkHealth, createSocket = (address) => new WebSocket(address) }: StreamOptions) => {
+export const createFrameStream = ({ url, capture, onStatus, onTracking, checkHealth, createSocket = (address) => new WebSocket(address) }: StreamOptions) => {
   let stopped = false;
   let socket: StreamSocket | null = null;
   let consecutiveRejections = 0;
@@ -46,6 +46,13 @@ export const createFrameStream = ({ url, capture, onStatus, checkHealth, createS
     let captureStartedAt = 0;
     let lastCaptureAt = performance.now();
     let lastTimestamp = -1;
+    let frameWidth = 0;
+    let frameHeight = 0;
+    let expiry: ReturnType<typeof setTimeout> | undefined;
+    const clearTracking = () => {
+      clearTimeout(expiry);
+      onTracking?.(null);
+    };
     let released = false;
     let stepTimer: ReturnType<typeof setTimeout> | undefined;
     let deadline: ReturnType<typeof setTimeout> | undefined;
@@ -55,6 +62,7 @@ export const createFrameStream = ({ url, capture, onStatus, checkHealth, createS
       if (released) return;
 
       released = true;
+      clearTracking();
       socket = null;
       clearTimeout(stepTimer);
       clearTimeout(deadline);
@@ -135,6 +143,8 @@ export const createFrameStream = ({ url, capture, onStatus, checkHealth, createS
         }
 
         pendingFrameId = nextFrameId++;
+        frameWidth = frame.width;
+        frameHeight = frame.height;
         lastTimestamp = frame.capturedAtMs;
         lastCaptureAt = performance.now();
         connection.send(packet);
@@ -150,7 +160,7 @@ export const createFrameStream = ({ url, capture, onStatus, checkHealth, createS
       armDeadline(config.connectionTimeoutMs, "Stream startup timed out.");
 
       try {
-        connection.send(JSON.stringify({ type: "stream:start", requestId, protocolVersion: 1 }));
+        connection.send(JSON.stringify({ type: "stream:start", requestId, protocolVersion: 2 }));
       } catch {
         recover("Stream startup failed.");
       }
@@ -169,13 +179,23 @@ export const createFrameStream = ({ url, capture, onStatus, checkHealth, createS
           streamId = message.streamId;
           onStatus({ phase: "streaming", message: "Sending camera frames to the CV service." });
           scheduleCapture();
-        } else if (message.type === "frame:ack") {
+        } else if (message.type === "tracking:result") {
           if (message.streamId !== streamId || message.frameId !== pendingFrameId) return;
 
           clearTimeout(deadline);
           pendingFrameId = null;
           consecutiveRejections = 0;
           retries = 0;
+
+          const remainingMs = lastTimestamp + config.trackingMaxAgeMs - performance.now();
+          if (message.hands.length === 0 || remainingMs <= 0) {
+            clearTracking();
+          } else {
+            clearTimeout(expiry);
+            onTracking?.({ hands: message.hands, width: frameWidth, height: frameHeight });
+            expiry = setTimeout(clearTracking, remainingMs);
+          }
+
           scheduleCapture();
         } else if (message.type === "stream:stopped") {
           if (message.streamId === streamId) recover("The service ended the stream.");
@@ -194,11 +214,12 @@ export const createFrameStream = ({ url, capture, onStatus, checkHealth, createS
 
             clearTimeout(deadline);
             pendingFrameId = null;
+            clearTracking();
             scheduleCapture();
           }
         }
       } catch {
-        fail("The CV service does not speak streaming protocol v1. Check the endpoint implementation.");
+        fail("The CV service does not speak streaming protocol v2. Check the endpoint implementation.");
       }
     };
 

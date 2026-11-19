@@ -11,7 +11,7 @@ test("binary frame uses a big-endian UTF-8 byte length and unchanged JPEG bytes"
   const header = JSON.parse(new TextDecoder().decode(packet.slice(4, 4 + headerLength)));
 
   assert.deepEqual(header, {
-    type: "stream:frame", protocolVersion: 1, streamId: "stream-č", frameId: 17,
+    type: "stream:frame", protocolVersion: 2, streamId: "stream-č", frameId: 17,
     capturedAtMs: 123.5, width: 640, height: 480, mimeType: "image/jpeg",
   });
   assert.deepEqual(packet.slice(4 + headerLength), await frame.jpeg.arrayBuffer());
@@ -40,9 +40,9 @@ test("invalid dimensions, bytes, codec, IDs, and timestamps are rejected before 
 test("server messages reject unknown types, extra fields, malformed IDs, binary, and oversized JSON", () => {
   for (const message of [
     "not JSON", "[]", "null", JSON.stringify({ type: "unknown" }),
-    JSON.stringify({ type: "frame:ack", streamId: "s", frameId: -1 }),
-    JSON.stringify({ type: "frame:ack", streamId: "s", frameId: 1, extra: true }),
-    JSON.stringify({ type: "stream:started", requestId: "r", streamId: "s", protocolVersion: 2 }),
+    JSON.stringify({ type: "tracking:result", hands: [], streamId: "s", frameId: -1 }),
+    JSON.stringify({ type: "tracking:result", hands: [], streamId: "s", frameId: 1, extra: true }),
+    JSON.stringify({ type: "stream:started", requestId: "r", streamId: "s", protocolVersion: 3 }),
     JSON.stringify({ type: "stream:error", code: "X", message: "x", fatal: "true" }),
     " ".repeat(config.maxResponseBytes + 1),
     JSON.stringify("č".repeat(config.maxResponseBytes / 2)),
@@ -51,8 +51,8 @@ test("server messages reject unknown types, extra fields, malformed IDs, binary,
     assert.throws(() => parseServerMessage(message));
   }
 
-  const ack = { type: "frame:ack", streamId: "s", frameId: 1 };
-  assert.deepEqual(parseServerMessage(JSON.stringify(ack)), ack);
+  const empty = { type: "tracking:result", hands: [], streamId: "s", frameId: 1 };
+  assert.deepEqual(parseServerMessage(JSON.stringify(empty)), empty);
 });
 
 test("service URLs reject mixed content, embedded credentials, fragments, and non-WebSocket schemes", () => {
@@ -61,5 +61,18 @@ test("service URLs reject mixed content, embedded credentials, fragments, and no
 
   for (const url of ["ws://localhost:8000", "https://cv.example", "wss://user:secret@cv.example", "wss://cv.example/#x"]) {
     assert.throws(() => validateStreamUrl(url, "https:"));
+  }
+});
+
+test("tracking results require up to two complete hands with finite xyz triples", () => {
+  const points = Array.from({ length: 21 }, () => [0.8, -0.03, -0.1]);
+  const hand = { landmarks: points };
+  const result = { type: "tracking:result", hands: [hand, hand], streamId: "stream", frameId: 1 };
+  assert.deepEqual(parseServerMessage(JSON.stringify(result)), result);
+
+  for (const hands of [null, [hand, hand, hand], [{ ...hand, gesture: "open" }], [{ landmarks: points.slice(1) }],
+    [{ landmarks: [...points.slice(1), [1, 1]] }], [{ landmarks: [...points.slice(1), [1, "1", 0]] }],
+    [{ landmarks: [...points.slice(1), [9, 1, 0]] }]]) {
+    assert.throws(() => parseServerMessage(JSON.stringify({ ...result, hands })));
   }
 });

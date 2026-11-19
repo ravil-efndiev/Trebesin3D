@@ -6,7 +6,8 @@ import time
 import unittest
 from contextlib import ExitStack
 from io import BytesIO
-from unittest.mock import patch
+from pathlib import Path
+from unittest.mock import Mock, patch
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 from uuid import uuid4
@@ -79,12 +80,12 @@ class StreamingTests(unittest.TestCase):
             additional_headers=headers if headers is not None else {"x-api-key": self.key}, open_timeout=2,
         )
 
-    def start_stream(self, websocket):
-        websocket.send(json.dumps({"type": "stream:start", "requestId": "start", "protocolVersion": 1}))
+    def start_stream(self, websocket, version=1):
+        websocket.send(json.dumps({"type": "stream:start", "requestId": "start", "protocolVersion": version}))
         response = json.loads(websocket.recv(timeout=2))
         stream_id = response["streamId"]
         self.assertEqual(response, {
-            "type": "stream:started", "requestId": "start", "protocolVersion": 1, "streamId": stream_id
+            "type": "stream:started", "requestId": "start", "protocolVersion": version, "streamId": stream_id
         })
         return stream_id
 
@@ -190,7 +191,10 @@ class StreamingTests(unittest.TestCase):
                 "fatal": False, "streamId": stream_id, "frameId": 1,
             })
             websocket.send(packet(stream_id, 2, jpeg=b"\xff\xd8garbage\xff\xd9"))
-            self.assertEqual(json.loads(websocket.recv(timeout=2))["frameId"], 2)
+            self.assertEqual(json.loads(websocket.recv(timeout=2)), {
+                "type": "stream:error", "code": "INVALID_FRAME", "message": "JPEG validation failed.",
+                "fatal": False, "streamId": stream_id, "frameId": 2,
+            })
             websocket.send(packet(stream_id, 3))
             self.assertEqual(json.loads(websocket.recv(timeout=2)), {
                 "type": "frame:ack", "streamId": stream_id, "frameId": 3,
@@ -202,6 +206,14 @@ class StreamingTests(unittest.TestCase):
             })
             time.sleep(0.06)
             self.assertNotEqual(self.start_stream(websocket), stream_id)
+
+    def test_multiple_picture_jpeg_is_rejected_before_tracking(self):
+        with Image.new("RGB", (16, 12)) as picture, BytesIO() as buffer, self.websocket() as websocket:
+            picture.save(buffer, format="MPO", save_all=True, append_images=[picture.copy()])
+            stream_id = self.start_stream(websocket, 2)
+            websocket.send(packet(stream_id, jpeg=buffer.getvalue(), protocolVersion=2))
+            response = json.loads(websocket.recv(timeout=2))
+            self.assertEqual((response["code"], response["fatal"], response["frameId"]), ("INVALID_FRAME", False, 1))
 
     def test_invalid_messages_close_without_a_receipt(self):
         for invalid in (
@@ -219,6 +231,99 @@ class StreamingTests(unittest.TestCase):
                 self.assertTrue(response["fatal"])
                 with self.assertRaises(ConnectionClosed):
                     websocket.recv(timeout=2)
+
+    def test_tracking_follows_movement_and_clears_on_blank_frame(self):
+        fixture = Path(__file__).resolve().parents[2] / "tests/fixtures/pointing_up.jpg"
+        with self.websocket() as websocket, Image.open(fixture) as hand:
+            stream = self.start_stream(websocket, 2)
+            wrist_positions = []
+            for frame_id, offset in enumerate((30, 110, None), start=1):
+                with Image.new("RGB", (640, 480)) as scene:
+                    if offset is not None:
+                        scene.paste(hand, (offset, 40))
+                    buffer = BytesIO()
+                    scene.save(buffer, format="JPEG")
+
+                websocket.send(packet(
+                    stream, frame_id, buffer.getvalue(), width=640, height=480, protocolVersion=2,
+                ))
+                result = json.loads(websocket.recv(timeout=2))
+                hands = result.pop("hands")
+                self.assertEqual(result, {"type": "tracking:result", "streamId": stream, "frameId": frame_id})
+                if offset is None:
+                    self.assertEqual(hands, [])
+                    continue
+
+                self.assertEqual(len(hands), 1)
+                landmarks = hands[0]["landmarks"]
+                self.assertEqual(len(landmarks), 21)
+                for point in landmarks:
+                    self.assertEqual(len(point), 3)
+                    self.assertTrue(all(abs(value) <= 8 for value in point))
+                wrist_positions.append(landmarks[0][0])
+
+            self.assertAlmostEqual(wrist_positions[1] - wrist_positions[0], 80 / 640, delta=0.05)
+
+    def test_v2_trackers_are_isolated_and_closed_on_stop_and_disconnect(self):
+        with patch("src.api.v1.websocket.HandTracker") as factory:
+            trackers = [Mock(), Mock(), Mock()]
+            factory.side_effect = trackers
+            with self.websocket() as first, self.websocket() as second:
+                stream = self.start_stream(first, 2)
+                self.start_stream(second, 2)
+                first.send(json.dumps({"type": "stream:stop", "requestId": "s", "streamId": stream}))
+                self.assertEqual(json.loads(first.recv(timeout=2))["type"], "stream:stopped")
+                trackers[0].close.assert_called_once()
+                trackers[1].close.assert_not_called()
+                self.assertNotEqual(self.start_stream(first, 2), stream)
+
+            deadline = time.monotonic() + 2
+            while not all(tracker.close.called for tracker in trackers) and time.monotonic() < deadline:
+                time.sleep(0.01)
+            for tracker in trackers:
+                tracker.close.assert_called_once()
+
+    def test_tracker_setup_failure_has_request_id(self):
+        with patch("src.api.v1.websocket.HandTracker", side_effect=ValueError("invalid model")), self.websocket() as ws:
+            ws.send(json.dumps({"type": "stream:start", "requestId": "s", "protocolVersion": 2}))
+            message = json.loads(ws.recv(timeout=2))
+            self.assertEqual((message["code"], message["fatal"], message["requestId"]), ("TRACKER_UNAVAILABLE", True, "s"))
+
+    def test_timed_out_work_keeps_capacity_until_it_finishes(self):
+        finish = threading.Event()
+        entered = threading.Event()
+
+        def slow_process(_processor, _frame):
+            entered.set()
+            finish.wait(timeout=5)
+
+        with patch("src.api.v1.websocket.FRAME_TIMEOUT", 0.1), patch("src.api.v1.websocket.StreamProcessor.process", slow_process):
+            with ExitStack() as clients:
+                for _ in range(3):
+                    clients.enter_context(self.websocket())
+
+                with self.websocket() as ws:
+                    stream = self.start_stream(ws)
+                    ws.send(packet(stream))
+                    self.assertTrue(entered.wait(timeout=1))
+                    self.assertEqual(json.loads(ws.recv(timeout=2))["code"], "FRAME_TIMEOUT")
+
+                try:
+                    with self.assertRaises(InvalidStatus):
+                        self.websocket()
+                finally:
+                    finish.set()
+
+                deadline = time.monotonic() + 2
+                while True:
+                    try:
+                        with self.websocket() as ws:
+                            self.start_stream(ws)
+                            break
+                    except InvalidStatus:
+                        if time.monotonic() >= deadline:
+                            raise
+                        time.sleep(0.01)
 
     def test_transport_rejects_oversize(self):
         with self.websocket() as websocket:

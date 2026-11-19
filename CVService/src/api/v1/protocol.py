@@ -66,10 +66,10 @@ def parse_object(text: str) -> dict:
 
 
 def is_version(value: object) -> bool:
-    return type(value) in (int, float) and value == 1
+    return type(value) in (int, float) and value in (1, 2)
 
 
-def read_frame(packet: bytes) -> Frame:
+def read_frame(packet: bytes, version: int) -> Frame:
     if not 6 <= len(packet) <= MAX_PACKET_BYTES:
         raise ProtocolError("Invalid frame size.")
 
@@ -83,9 +83,11 @@ def read_frame(packet: bytes) -> Frame:
     except UnicodeError as error:
         raise ProtocolError("Invalid UTF-8 frame header.") from error
 
-    if set(header) != {
-        "type", "protocolVersion", "streamId", "frameId", "capturedAtMs", "width", "height", "mimeType"
-    } or header["type"] != "stream:frame" or not is_version(header["protocolVersion"]):
+    expected_fields = {"type", "protocolVersion", "streamId", "frameId", "capturedAtMs", "width", "height", "mimeType"}
+    if (
+        set(header) != expected_fields or header["type"] != "stream:frame"
+        or not is_version(header["protocolVersion"]) or header["protocolVersion"] != version
+    ):
         raise ProtocolError("Invalid frame header.")
 
     stream_id, frame_id, timestamp = header["streamId"], header["frameId"], header["capturedAtMs"]

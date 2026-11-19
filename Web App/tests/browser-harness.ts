@@ -1,3 +1,4 @@
+import handFixtureUrl from "../../tests/fixtures/pointing_up.jpg?url";
 import { makeSocket } from "./helpers.ts";
 import apiClient from "../src/utils/api.ts";
 import { parseServerMessage } from "../src/utils/protocol.ts";
@@ -5,7 +6,19 @@ import { parseServerMessage } from "../src/utils/protocol.ts";
 // Development-only fixture, not imported by the production app or build.
 const mode = new URLSearchParams(location.search).get("mode") ?? "success";
 const tracks: MediaStreamTrack[] = [];
-const metrics = { cameraRequests: 0, connections: 0, frames: 0, pending: 0, maxPending: 0, validJpegs: 0, receipts: 0, failures: 0 };
+// Fixed upright hand for exercising overlay placement without a model.
+const mockLandmarks = [
+  [0.5, 0.85], [0.4, 0.72], [0.34, 0.63], [0.28, 0.56], [0.22, 0.50],
+  [0.40, 0.54], [0.38, 0.40], [0.37, 0.30], [0.36, 0.20],
+  [0.49, 0.51], [0.48, 0.35], [0.48, 0.24], [0.48, 0.13],
+  [0.57, 0.53], [0.59, 0.38], [0.60, 0.29], [0.61, 0.19],
+  [0.64, 0.58], [0.67, 0.48], [0.69, 0.41], [0.71, 0.34],
+].map(([x, y]) => [x, y, 0]);
+
+let showHand = true;
+document.getElementById("toggle-hand")!.onclick = () => { showHand = !showHand; };
+
+const metrics = { cameraRequests: 0, connections: 0, frames: 0, pending: 0, maxPending: 0, validJpegs: 0, results: 0, withHands: 0, failures: 0 };
 
 Object.defineProperty(navigator.mediaDevices, "getUserMedia", {
   configurable: true,
@@ -21,6 +34,12 @@ Object.defineProperty(navigator.mediaDevices, "getUserMedia", {
     canvas.width = 1280;
     canvas.height = 720;
     const context = canvas.getContext("2d")!;
+    const fixture = new Image();
+    if (mode === "live") {
+      fixture.src = handFixtureUrl;
+      await fixture.decode();
+    }
+
     const stream = canvas.captureStream(30);
     tracks.push(...stream.getTracks());
     let frame = 0;
@@ -32,6 +51,9 @@ Object.defineProperty(navigator.mediaDevices, "getUserMedia", {
 
       context.fillStyle = `hsl(${frame++ % 360} 70% 40%)`;
       context.fillRect(0, 0, canvas.width, canvas.height);
+      if (mode === "live" && showHand) {
+        context.drawImage(fixture, 260 + 120 * Math.sin(frame / 25), 60, 537, 564);
+      }
     }, 33);
 
     return stream;
@@ -47,7 +69,10 @@ if (mode === "live") {
       socket.addEventListener("message", (event) => {
         try {
           const message = parseServerMessage(event.data);
-          if (message.type === "frame:ack") metrics.receipts++;
+          if (message.type === "tracking:result") {
+            metrics.results++;
+            if (message.hands.length) metrics.withHands++;
+          }
           if (message.type === "stream:error") metrics.failures++;
         } catch {
           metrics.failures++;
@@ -83,7 +108,7 @@ if (mode === "live") {
               if (mode === "incompatible") {
                 peer.socket.onmessage?.({ data: "Message text was: start" } as MessageEvent);
               } else {
-                peer.receive({ type: "stream:started", requestId: control.requestId, protocolVersion: 1, streamId });
+                peer.receive({ type: "stream:started", requestId: control.requestId, protocolVersion: 2, streamId });
               }
             }, 10);
           }
@@ -113,8 +138,8 @@ if (mode === "live") {
 
                 pending--;
                 metrics.pending--;
-                peer.receive({ type: "frame:ack", streamId, frameId: header.frameId });
-              }, 250);
+                peer.receive({ type: "tracking:result", hands: showHand ? [{ landmarks: mockLandmarks }] : [], streamId, frameId: header.frameId });
+              }, 80);
             }
           } catch {
             metrics.failures++;
@@ -153,7 +178,8 @@ setInterval(() => {
     ...(mode === "live" ? {
       cameraRequests: metrics.cameraRequests,
       connections: metrics.connections,
-      receipts: metrics.receipts,
+      results: metrics.results,
+      withHands: metrics.withHands,
       failures: metrics.failures,
     } : metrics),
     stoppedTracks: tracks.filter((track) => track.readyState === "ended").length,

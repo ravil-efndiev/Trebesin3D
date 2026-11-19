@@ -5,7 +5,7 @@ import { createFrameStream } from "../src/utils/stream.ts";
 import type { CapturedFrame, StreamStatus } from "../src/utils/types.ts";
 import { makeFrame, makeSocket } from "./helpers.ts";
 
-test("start is required, cadence is capped, and only a matching receipt releases the frame slot", async (t) => {
+test("start is required, cadence is capped, and only a matching result releases the frame slot", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const peer = makeSocket();
   let captures = 0;
@@ -24,12 +24,12 @@ test("start is required, cadence is capped, and only a matching receipt releases
   t.mock.timers.tick(500);
   await Promise.resolve();
   assert.equal(captures, 1);
-  peer.receive({ type: "frame:ack", streamId: "old-stream", frameId: 1 });
-  peer.receive({ type: "frame:ack", streamId: "test-stream", frameId: 2 });
+  peer.receive({ type: "tracking:result", hands: [], streamId: "old-stream", frameId: 1 });
+  peer.receive({ type: "tracking:result", hands: [], streamId: "test-stream", frameId: 2 });
   t.mock.timers.tick(100);
   assert.equal(captures, 1);
 
-  peer.receive({ type: "frame:ack", streamId: "test-stream", frameId: 1 });
+  peer.receive({ type: "tracking:result", hands: [], streamId: "test-stream", frameId: 1 });
   assert.equal(captures, 1);
   t.mock.timers.tick(100);
   await Promise.resolve();
@@ -82,7 +82,7 @@ test("response timeout reconnects with fresh stream state and ignores previous s
   peers[1].start("new");
   t.mock.timers.tick(100);
   await Promise.resolve();
-  previousCallback({ data: JSON.stringify({ type: "frame:ack", streamId: "old", frameId: 1 }) } as MessageEvent);
+  previousCallback({ data: JSON.stringify({ type: "tracking:result", hands: [], streamId: "old", frameId: 1 }) } as MessageEvent);
   t.mock.timers.tick(100);
   assert.equal(peers[1].frames().length, 1);
 
@@ -262,4 +262,45 @@ test("a stalled health check times out and ignores late success", async (t) => {
   healthy!();
   await Promise.resolve();
   assert.equal(sockets, 0);
+});
+
+test("tracking displays only a fresh matching sample and clears it at capture age or on stream loss", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  let now = 1000;
+  t.mock.method(performance, "now", () => now);
+  const peer = makeSocket();
+  const samples: unknown[] = [];
+  const hands = [{ landmarks: Array.from({ length: 21 }, () => [0.5, 0.5, 0]) }];
+  const client = createFrameStream({
+    url: "ws://localhost/api/v1/stream", createSocket: () => peer.socket, onStatus: () => {},
+    capture: async () => makeFrame(now), onTracking: (sample) => samples.push(sample),
+  });
+  t.after(client.stop);
+  peer.start();
+  t.mock.timers.tick(100);
+  await Promise.resolve();
+  const receive = (frameId: number, streamId = "test-stream") => {
+    peer.receive({ type: "tracking:result", hands, streamId, frameId });
+  };
+
+  now += 50;
+  receive(1, "other");
+  assert.deepEqual(samples, []);
+  receive(1);
+  assert.deepEqual(samples.at(-1), { hands, width: 640, height: 480 });
+  t.mock.timers.tick(149);
+  assert.notEqual(samples.at(-1), null);
+  t.mock.timers.tick(1);
+  assert.equal(samples.at(-1), null);
+
+  await Promise.resolve();
+  now += 201;
+  receive(2);
+  assert.deepEqual(samples.slice(1), [null, null]);
+  t.mock.timers.tick(100);
+  await Promise.resolve();
+  receive(3);
+  assert.notEqual(samples.at(-1), null);
+  client.stop();
+  assert.equal(samples.at(-1), null);
 });
