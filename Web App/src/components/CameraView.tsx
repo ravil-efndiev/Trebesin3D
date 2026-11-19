@@ -41,14 +41,14 @@ const CameraView = () => {
           <Webcam
             ref={ webcamRef }
             audio={ false }
-            mirrored={ false }
+            mirrored={ true }
             videoConstraints={ videoConstraints }
             onUserMedia={ onUserMedia }
             onUserMediaError={ onUserMediaError }
             className="block h-auto w-full"
-            aria-label="Unmirrored camera preview"
+            aria-label="Mirrored camera preview"
           />
-          <canvas ref={ overlayRef } aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full" />
+          <canvas ref={ overlayRef } aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full -scale-x-100" />
         </div>
       )}
     </section>

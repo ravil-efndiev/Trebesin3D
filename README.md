@@ -71,7 +71,7 @@ CVService accepts `http://127.0.0.1:5173` and `http://localhost:5173` by default
 
 ## Camera hand tracking
 
-Select **Start camera** and allow camera access. The preview draws landmarks over your hand as you move. The browser sends unmirrored JPEGs to the displayed service at up to 640×480 and about 15 frames per second, with one frame in flight. Audio is disabled. The app processes frames in memory and neither records nor logs frames or tracking results.
+Select **Start camera** and allow camera access. The mirrored preview draws landmarks over your hand as you move. The browser sends unmirrored JPEGs to the displayed service at up to 640×480 and about 15 frames per second, with one frame in flight. Audio is disabled. The app processes frames in memory and neither records nor logs frames or tracking results.
 
 An empty result clears the outline immediately, and a tracking sample expires 200 ms after capture. Hiding the tab pauses transmission, and returning starts a fresh stream. **Stop camera** releases the camera tracks and closes the stream.
 
