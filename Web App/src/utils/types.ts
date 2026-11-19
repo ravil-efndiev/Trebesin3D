@@ -56,9 +56,12 @@ export interface StreamSocket {
   close: (code?: number, reason?: string) => void;
 }
 
+export type ScheduleFrame = (notBeforeMs: number, onFrame: (mediaTime?: number) => void) => (() => void) | undefined;
+
 export interface StreamOptions {
   url: string;
-  capture: (signal: AbortSignal) => Promise<CapturedFrame | null>;
+  capture: (signal: AbortSignal, mediaTime?: number) => Promise<CapturedFrame | null>;
+  scheduleFrame?: ScheduleFrame;
   onStatus: (status: StreamStatus) => void;
   onTracking?: (sample: TrackingSample | null) => void;
   createSocket?: (url: string) => StreamSocket;

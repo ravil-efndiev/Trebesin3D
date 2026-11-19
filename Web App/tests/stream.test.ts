@@ -62,6 +62,80 @@ test("stop cancels timers and prevents a late encode from sending", async (t) =>
   assert.equal(peer.sent.filter((data) => typeof data === "string" && JSON.parse(data).type === "stream:stop").length, 1);
 });
 
+test("video frame scheduling keeps the pacing clock and waits for each matching result", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  let now = 1000;
+  t.mock.method(performance, "now", () => now);
+  const peer = makeSocket();
+  const slots: number[] = [];
+  const mediaTimes: (number | undefined)[] = [];
+  let frameReady: ((mediaTime: number) => void) | undefined;
+  const client = createFrameStream({
+    url: "ws://localhost/api/v1/stream", createSocket: () => peer.socket, onStatus: () => {},
+    scheduleFrame: (notBefore, onFrame) => {
+      slots.push(notBefore);
+      frameReady = onFrame;
+      return () => { frameReady = undefined; };
+    },
+    capture: async (_signal, mediaTime) => {
+      mediaTimes.push(mediaTime);
+      return makeFrame(now);
+    },
+  });
+  t.after(client.stop);
+  peer.start();
+  assert.deepEqual(slots, [1000]);
+
+  // The video only has a new frame at discrete points on the pacing clock.
+  now = 1033;
+  frameReady!(0.033);
+  await Promise.resolve();
+  assert.equal(peer.frames().length, 1);
+  assert.equal(slots.length, 1);
+  peer.receive({ type: "tracking:result", hands: [], streamId: "test-stream", frameId: 1 });
+  assert.equal(slots[1], 1000 + config.frameIntervalMs);
+
+  now = 1067;
+  frameReady!(0.067);
+  await Promise.resolve();
+  assert.equal(peer.frames().length, 2);
+  assert.deepEqual(mediaTimes, [0.033, 0.067]);
+  peer.receive({ type: "tracking:result", hands: [], streamId: "test-stream", frameId: 2 });
+
+  now = 1500;
+  frameReady!(0.5);
+  await Promise.resolve();
+  peer.receive({ type: "tracking:result", hands: [], streamId: "test-stream", frameId: 3 });
+  assert.equal(slots.at(-1), now);
+
+  const lateFrame = frameReady!;
+  client.stop();
+  assert.equal(frameReady, undefined);
+  lateFrame(0.533);
+  assert.deepEqual(mediaTimes, [0.033, 0.067, 0.5]);
+});
+
+test("a video frame callback that never arrives times out and is cancelled", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  t.mock.method(performance, "now", () => 1000);
+  const peer = makeSocket();
+  const states: StreamStatus[] = [];
+  let cancelled = false;
+  const client = createFrameStream({
+    url: "ws://localhost/api/v1/stream", createSocket: () => peer.socket,
+    onStatus: (state) => states.push(state),
+    scheduleFrame: () => () => { cancelled = true; },
+    capture: async () => assert.fail("Capture requires a video frame"),
+  });
+  t.after(client.stop);
+  peer.start();
+  t.mock.timers.tick(config.frameTimeoutMs);
+  assert.equal(states.at(-1)?.phase, "streaming");
+  t.mock.timers.tick(config.mediaReadyTimeoutMs - config.frameTimeoutMs);
+  assert.match(states.at(-1)?.message ?? "", /not producing new video frames/);
+  assert.equal(cancelled, true);
+});
+
 test("response timeout reconnects with fresh stream state and ignores previous socket callbacks", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const peers: ReturnType<typeof makeSocket>[] = [];
@@ -214,6 +288,8 @@ test("failed health never opens a socket; successful health allows connection", 
 
 test("three consecutive correlated rejections stop capture and success resets the count", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
+  let now = 1000;
+  t.mock.method(performance, "now", () => now);
   const peer = makeSocket();
   const states: StreamStatus[] = [];
   let captures = 0;
@@ -229,6 +305,7 @@ test("three consecutive correlated rejections stop capture and success resets th
   });
 
   for (let frameId = 1; frameId <= 6; frameId++) {
+    now += 100;
     t.mock.timers.tick(100);
     await Promise.resolve();
     assert.equal(captures, frameId);

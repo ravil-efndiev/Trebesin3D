@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type Webcam from "react-webcam";
 import { checkServiceHealth } from "../utils/api.ts";
-import { createFrameCapture, stopMediaTracks } from "../utils/camera.ts";
+import { createFrameCapture, createFrameScheduler, stopMediaTracks } from "../utils/camera.ts";
 import { drawHandOverlay } from "../utils/handOverlay.ts";
 import { validateStreamUrl } from "../utils/protocol.ts";
 import { createFrameStream } from "../utils/stream.ts";
@@ -110,9 +110,11 @@ export const useCameraStream = (url: string) => {
       return;
     }
 
+    const getVideo = () => webcamRef.current?.video ?? null;
     const client = createFrameStream({
       url: validateStreamUrl(url, window.location.protocol),
-      capture: createFrameCapture(() => webcamRef.current?.video ?? null),
+      capture: createFrameCapture(getVideo),
+      scheduleFrame: createFrameScheduler(getVideo),
       onStatus: reportStatus,
       onTracking: (sample) => drawHandOverlay(overlayRef.current, sample),
       checkHealth: (signal) => checkServiceHealth(url, signal),

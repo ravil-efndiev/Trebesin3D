@@ -1,7 +1,8 @@
 export const config = {
   defaultApiUrl: "/api",
   streamPath: "/api/v1/stream",
-  frameIntervalMs: 1000 / 15,
+  frameIntervalMs: 1000 / 18,
+  videoFrameCallbackTimeoutMs: 150,
   trackingMaxAgeMs: 200,
   frameTimeoutMs: 2000,
   connectionTimeoutMs: 3000,

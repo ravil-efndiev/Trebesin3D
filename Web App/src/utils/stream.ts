@@ -2,7 +2,7 @@ import { config } from "./config.ts";
 import { createFramePacket, parseServerMessage } from "./protocol.ts";
 import type { StreamOptions, StreamSocket } from "./types.ts";
 
-export const createFrameStream = ({ url, capture, onStatus, onTracking, checkHealth, createSocket = (address) => new WebSocket(address) }: StreamOptions) => {
+export const createFrameStream = ({ url, capture, scheduleFrame, onStatus, onTracking, checkHealth, createSocket = (address) => new WebSocket(address) }: StreamOptions) => {
   let stopped = false;
   let socket: StreamSocket | null = null;
   let consecutiveRejections = 0;
@@ -43,8 +43,8 @@ export const createFrameStream = ({ url, capture, onStatus, onTracking, checkHea
     let streamId: string | null = null;
     let nextFrameId = 1;
     let pendingFrameId: number | null = null;
-    let captureStartedAt = 0;
-    let lastCaptureAt = performance.now();
+    let nextCaptureAt = 0;
+    let lastCaptureAt = 0;
     let lastTimestamp = -1;
     let frameWidth = 0;
     let frameHeight = 0;
@@ -54,7 +54,7 @@ export const createFrameStream = ({ url, capture, onStatus, onTracking, checkHea
       onTracking?.(null);
     };
     let released = false;
-    let stepTimer: ReturnType<typeof setTimeout> | undefined;
+    let cancelCapture: (() => void) | undefined;
     let deadline: ReturnType<typeof setTimeout> | undefined;
     const isCurrent = () => !stopped && socket === connection;
 
@@ -64,7 +64,7 @@ export const createFrameStream = ({ url, capture, onStatus, onTracking, checkHea
       released = true;
       clearTracking();
       socket = null;
-      clearTimeout(stepTimer);
+      cancelCapture?.();
       clearTimeout(deadline);
       abort.abort();
       connection.onopen = null;
@@ -105,33 +105,41 @@ export const createFrameStream = ({ url, capture, onStatus, onTracking, checkHea
     };
 
     const scheduleCapture = () => {
-      clearTimeout(stepTimer);
-      stepTimer = setTimeout(() => void sendFrame(), Math.max(0, config.frameIntervalMs - (performance.now() - captureStartedAt)));
+      if (!isCurrent()) return;
+
+      cancelCapture?.();
+      clearTimeout(deadline);
+      deadline = setTimeout(
+        () => fail("The camera is not producing new video frames."),
+        Math.max(0, lastCaptureAt + config.mediaReadyTimeoutMs - performance.now()),
+      );
+
+      cancelCapture = scheduleFrame?.(nextCaptureAt, (mediaTime) => void sendFrame(mediaTime));
+      if (!cancelCapture) {
+        const timer = setTimeout(() => void sendFrame(), Math.max(0, Math.ceil(nextCaptureAt - performance.now())));
+        cancelCapture = () => clearTimeout(timer);
+      }
     };
 
-    const sendFrame = async () => {
+    const sendFrame = async (mediaTime?: number) => {
       if (!isCurrent() || !streamId || pendingFrameId !== null) return;
+      cancelCapture = undefined;
       if (connection.readyState !== WebSocket.OPEN || connection.bufferedAmount !== 0) {
         recover("The connection is unavailable or backlogged.");
         return;
       }
 
-      captureStartedAt = performance.now();
+      const captureStartedAt = performance.now();
       armDeadline(config.frameTimeoutMs, "Frame capture or response timed out.");
 
       try {
-        const frame = await capture(abort.signal);
+        const frame = await capture(abort.signal, mediaTime);
 
         if (!isCurrent()) return;
 
         if (!frame || frame.capturedAtMs <= lastTimestamp) {
-          clearTimeout(deadline);
-
-          if (performance.now() - lastCaptureAt >= config.mediaReadyTimeoutMs) {
-            fail("The camera is not producing new video frames.");
-          } else {
-            scheduleCapture();
-          }
+          if (mediaTime === undefined) nextCaptureAt = captureStartedAt + config.frameIntervalMs;
+          scheduleCapture();
           return;
         }
 
@@ -143,6 +151,8 @@ export const createFrameStream = ({ url, capture, onStatus, onTracking, checkHea
         }
 
         pendingFrameId = nextFrameId++;
+        // Preserve the average cadence across discrete video frames, with at most one interval of credit.
+        nextCaptureAt = Math.max(nextCaptureAt + config.frameIntervalMs, captureStartedAt);
         frameWidth = frame.width;
         frameHeight = frame.height;
         lastTimestamp = frame.capturedAtMs;
@@ -177,6 +187,7 @@ export const createFrameStream = ({ url, capture, onStatus, onTracking, checkHea
 
           clearTimeout(deadline);
           streamId = message.streamId;
+          lastCaptureAt = nextCaptureAt = performance.now();
           onStatus({ phase: "streaming", message: "Sending camera frames to the CV service." });
           scheduleCapture();
         } else if (message.type === "tracking:result") {

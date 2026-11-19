@@ -31,7 +31,7 @@ Header example:
 - Header length: 1–1024 bytes. JPEG length: 1–262144 bytes (256 KiB). Total message maximum: 263172 bytes. No base64 or data URLs.
 - `frameId`: positive safe integer, strictly increasing within a stream, starting at 1. `capturedAtMs`: finite, nonnegative `performance.now()` timestamp taken immediately before drawing the current video frame; it must increase within the stream.
 - Images are upright and unmirrored, maximum 640×480 and 307200 pixels. The browser preserves the camera's actual aspect ratio, does not upscale, and starts at JPEG quality 0.75. Dimensions in the header must equal the encoded image dimensions.
-- Sampling is timer driven and capped near 15 Hz, independent of React rendering. Only one capture/encode/frame may be pending per stream. If video is not ready or has no new frame, skip that sampling slot. There is no image backlog.
+- The browser samples newly presented video frames with `requestVideoFrameCallback` and uses the video frame’s media timestamp to skip duplicates. It polls the video clock if the callback API is unavailable. It also switches to polling for the rest of the camera session if no usable callback arrives within 150 ms after the next sample is due. Sampling averages up to 18 Hz, with at most one interval of scheduling credit to account for discrete video frames. Only one encode or frame may be pending per stream. The browser skips frames while busy and keeps no image backlog.
 - The server checks ownership and ordering before decoding. It uses the JPEG header's actual dimensions to check the envelope and pixel limit before loading pixels. A frame ID and timestamp are consumed after these envelope checks, even if JPEG validation subsequently rejects the frame.
 
 ## Results and errors
@@ -59,7 +59,7 @@ Errors use:
 
 ## Timeouts, recovery, and server requirements
 
-- Connect/start timeout: 3 seconds per phase. Capture/encode/result timeout: 2 seconds total per frame. These are failure deadlines, not latency or inference benchmarks. Media startup has a separate 15-second readiness deadline after permission is granted; the user may stop while permission is pending.
+- Connect/start timeout: 3 seconds per phase. The browser allows 2 seconds for capture, encode and receipt once it starts copying a frame. It allows 15 seconds to find a usable frame after stream start or the last successful capture. The user can stop while waiting for camera permission.
 - No queued outgoing data is allowed before the browser sends a new frame. The server launcher caps WebSocket message size at 263172 bytes, uses a receive queue of one message, and disables WebSocket compression. It admits up to four sockets per process and allows 20 messages per second per socket with a burst of four. Text controls are limited to 4096 UTF-8 bytes.
 - Unexpected disconnects and timeouts retry with jittered exponential backoff: 250 ms base, doubling to a maximum of 8 seconds, at most five automatic retries before camera use ends. A matching successful frame response resets the retry budget. A new explicit Start also resets it.
 - Frame responses act as active-stream liveness checks; no separate application ping is required while frames are flowing. Connection, handshake, media-readiness, and frame deadlines bound other waits.
