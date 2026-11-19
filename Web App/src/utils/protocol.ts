@@ -1,3 +1,4 @@
+import { isGesture } from "./gestures.ts";
 import { config } from "./config.ts";
 import type { CapturedFrame, FrameHeader, ServerMessage } from "./types.ts";
 
@@ -48,16 +49,17 @@ export const parseServerMessage = (data: unknown): ServerMessage => {
   switch (record.type) {
     case "stream:started":
       keys = ["type", "requestId", "protocolVersion", "streamId"];
-      valid = isId(record.requestId) && isId(record.streamId) && record.protocolVersion === 2;
+      valid = isId(record.requestId) && isId(record.streamId) && record.protocolVersion === 3;
       break;
     case "stream:stopped":
       keys = ["type", "requestId", "streamId"];
       valid = isId(record.requestId) && isId(record.streamId);
       break;
     case "tracking:result":
-      keys = ["type", "streamId", "frameId", "hands"];
+      keys = ["type", "streamId", "frameId", "hands", "gesture"];
       valid = isId(record.streamId) && isFrameId(record.frameId)
-        && Array.isArray(record.hands) && record.hands.length <= 2 && record.hands.every(isHand);
+        && Array.isArray(record.hands) && record.hands.length <= 2 && record.hands.every(isHand)
+        && isGesture(record.gesture, record.hands.length);
       break;
     case "stream:error":
       keys = ["type", "code", "message", "fatal", "requestId", "streamId", "frameId"];
@@ -71,7 +73,7 @@ export const parseServerMessage = (data: unknown): ServerMessage => {
   }
 
   if (!valid || Object.keys(record).some((key) => !keys.includes(key))) {
-    throw new Error("CV service response does not match streaming protocol v2.");
+    throw new Error("CV service response does not match streaming protocol v3.");
   }
 
   return record as unknown as ServerMessage;
@@ -90,7 +92,7 @@ export const createFramePacket = (frame: CapturedFrame, streamId: string, frameI
 
   const header: FrameHeader = {
     type: "stream:frame",
-    protocolVersion: 2,
+    protocolVersion: 3,
     streamId,
     frameId,
     capturedAtMs: frame.capturedAtMs,

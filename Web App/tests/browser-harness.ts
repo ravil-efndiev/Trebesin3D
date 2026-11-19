@@ -108,7 +108,7 @@ if (mode === "live") {
               if (mode === "incompatible") {
                 peer.socket.onmessage?.({ data: "Message text was: start" } as MessageEvent);
               } else {
-                peer.receive({ type: "stream:started", requestId: control.requestId, protocolVersion: 2, streamId });
+                peer.receive({ type: "stream:started", requestId: control.requestId, protocolVersion: 3, streamId });
               }
             }, 10);
           }
@@ -138,7 +138,7 @@ if (mode === "live") {
 
                 pending--;
                 metrics.pending--;
-                peer.receive({ type: "tracking:result", hands: showHand ? [{ landmarks: mockLandmarks }] : [], streamId, frameId: header.frameId });
+                peer.receive({ type: "tracking:result", gesture: showHand ? "pan_ready" : "idle", hands: showHand ? [{ landmarks: mockLandmarks }] : [], streamId, frameId: header.frameId });
               }, 80);
             }
           } catch {

@@ -13,7 +13,7 @@ export const drawHandOverlay = (canvas: HTMLCanvasElement | null, sample: Tracki
   if (sample && canvas.height !== sample.height) canvas.height = sample.height;
   const { width, height } = canvas;
   context.clearRect(0, 0, width, height);
-  if (!sample) return;
+  if (!sample?.hands.length) return;
 
   context.lineWidth = 3;
   context.lineJoin = "round";

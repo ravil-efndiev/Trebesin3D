@@ -24,12 +24,12 @@ test("start is required, cadence is capped, and only a matching result releases 
   t.mock.timers.tick(500);
   await Promise.resolve();
   assert.equal(captures, 1);
-  peer.receive({ type: "tracking:result", hands: [], streamId: "old-stream", frameId: 1 });
-  peer.receive({ type: "tracking:result", hands: [], streamId: "test-stream", frameId: 2 });
+  peer.receive({ type: "tracking:result", gesture: "idle", hands: [], streamId: "old-stream", frameId: 1 });
+  peer.receive({ type: "tracking:result", gesture: "idle", hands: [], streamId: "test-stream", frameId: 2 });
   t.mock.timers.tick(100);
   assert.equal(captures, 1);
 
-  peer.receive({ type: "tracking:result", hands: [], streamId: "test-stream", frameId: 1 });
+  peer.receive({ type: "tracking:result", gesture: "idle", hands: [], streamId: "test-stream", frameId: 1 });
   assert.equal(captures, 1);
   t.mock.timers.tick(100);
   await Promise.resolve();
@@ -92,7 +92,7 @@ test("video frame scheduling keeps the pacing clock and waits for each matching 
   await Promise.resolve();
   assert.equal(peer.frames().length, 1);
   assert.equal(slots.length, 1);
-  peer.receive({ type: "tracking:result", hands: [], streamId: "test-stream", frameId: 1 });
+  peer.receive({ type: "tracking:result", gesture: "idle", hands: [], streamId: "test-stream", frameId: 1 });
   assert.equal(slots[1], 1000 + config.frameIntervalMs);
 
   now = 1067;
@@ -100,12 +100,12 @@ test("video frame scheduling keeps the pacing clock and waits for each matching 
   await Promise.resolve();
   assert.equal(peer.frames().length, 2);
   assert.deepEqual(mediaTimes, [0.033, 0.067]);
-  peer.receive({ type: "tracking:result", hands: [], streamId: "test-stream", frameId: 2 });
+  peer.receive({ type: "tracking:result", gesture: "idle", hands: [], streamId: "test-stream", frameId: 2 });
 
   now = 1500;
   frameReady!(0.5);
   await Promise.resolve();
-  peer.receive({ type: "tracking:result", hands: [], streamId: "test-stream", frameId: 3 });
+  peer.receive({ type: "tracking:result", gesture: "idle", hands: [], streamId: "test-stream", frameId: 3 });
   assert.equal(slots.at(-1), now);
 
   const lateFrame = frameReady!;
@@ -156,7 +156,7 @@ test("response timeout reconnects with fresh stream state and ignores previous s
   peers[1].start("new");
   t.mock.timers.tick(100);
   await Promise.resolve();
-  previousCallback({ data: JSON.stringify({ type: "tracking:result", hands: [], streamId: "old", frameId: 1 }) } as MessageEvent);
+  previousCallback({ data: JSON.stringify({ type: "tracking:result", gesture: "idle", hands: [], streamId: "old", frameId: 1 }) } as MessageEvent);
   t.mock.timers.tick(100);
   assert.equal(peers[1].frames().length, 1);
 
@@ -311,7 +311,7 @@ test("three consecutive correlated rejections stop capture and success resets th
     assert.equal(captures, frameId);
     rejectFrame(frameId + 100);
     if (frameId === 3) {
-      const receipt = start.protocolVersion === 1 ? { type: "frame:ack" } : { type: "tracking:result", hands: [] };
+      const receipt = start.protocolVersion === 1 ? { type: "frame:ack" } : { type: "tracking:result", gesture: "idle", hands: [] };
       peer.receive({ ...receipt, streamId: "test-stream", frameId });
     } else {
       rejectFrame(frameId);
@@ -357,14 +357,14 @@ test("tracking displays only a fresh matching sample and clears it at capture ag
   t.mock.timers.tick(100);
   await Promise.resolve();
   const receive = (frameId: number, streamId = "test-stream") => {
-    peer.receive({ type: "tracking:result", hands, streamId, frameId });
+    peer.receive({ type: "tracking:result", gesture: "cursor", hands, streamId, frameId });
   };
 
   now += 50;
   receive(1, "other");
   assert.deepEqual(samples, []);
   receive(1);
-  assert.deepEqual(samples.at(-1), { hands, width: 640, height: 480 });
+  assert.deepEqual(samples.at(-1), { gesture: "cursor", hands, width: 640, height: 480 });
   t.mock.timers.tick(149);
   assert.notEqual(samples.at(-1), null);
   t.mock.timers.tick(1);

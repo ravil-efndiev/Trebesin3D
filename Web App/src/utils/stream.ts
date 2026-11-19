@@ -170,7 +170,7 @@ export const createFrameStream = ({ url, capture, scheduleFrame, onStatus, onTra
       armDeadline(config.connectionTimeoutMs, "Stream startup timed out.");
 
       try {
-        connection.send(JSON.stringify({ type: "stream:start", requestId, protocolVersion: 2 }));
+        connection.send(JSON.stringify({ type: "stream:start", requestId, protocolVersion: 3 }));
       } catch {
         recover("Stream startup failed.");
       }
@@ -199,11 +199,11 @@ export const createFrameStream = ({ url, capture, scheduleFrame, onStatus, onTra
           retries = 0;
 
           const remainingMs = lastTimestamp + config.trackingMaxAgeMs - performance.now();
-          if (message.hands.length === 0 || remainingMs <= 0) {
+          if (remainingMs <= 0) {
             clearTracking();
           } else {
             clearTimeout(expiry);
-            onTracking?.({ hands: message.hands, width: frameWidth, height: frameHeight });
+            onTracking?.({ gesture: message.gesture, hands: message.hands, width: frameWidth, height: frameHeight });
             expiry = setTimeout(clearTracking, remainingMs);
           }
 
@@ -230,7 +230,7 @@ export const createFrameStream = ({ url, capture, scheduleFrame, onStatus, onTra
           }
         }
       } catch {
-        fail("The CV service does not speak streaming protocol v2. Check the endpoint implementation.");
+        fail("The CV service does not speak streaming protocol v3. Check the endpoint implementation.");
       }
     };
 

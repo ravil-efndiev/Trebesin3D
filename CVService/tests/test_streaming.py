@@ -264,6 +264,23 @@ class StreamingTests(unittest.TestCase):
 
             self.assertAlmostEqual(wrist_positions[1] - wrist_positions[0], 80 / 640, delta=0.05)
 
+    def test_v3_reports_cursor_for_real_index_pose_and_idle_on_loss(self):
+        fixture = Path(__file__).resolve().parents[2] / "tests/fixtures/pointing_up.jpg"
+        with self.websocket() as websocket, Image.open(fixture) as hand:
+            stream = self.start_stream(websocket, 3)
+            for frame_id, expected in enumerate(("cursor", "idle", "cursor"), start=1):
+                with Image.new("RGB", (640, 480)) as scene, BytesIO() as buffer:
+                    if expected == "cursor":
+                        scene.paste(hand, (30, 40))
+                    scene.save(buffer, format="JPEG")
+                    websocket.send(packet(stream, frame_id, buffer.getvalue(), width=640, height=480, protocolVersion=3))
+
+                response = json.loads(websocket.recv(timeout=2))
+                self.assertEqual((response["type"], response["streamId"], response["frameId"]),
+                                 ("tracking:result", stream, frame_id))
+                self.assertEqual(response["gesture"], expected)
+                self.assertEqual(len(response["hands"]), int(expected == "cursor"))
+
     def test_v2_trackers_are_isolated_and_closed_on_stop_and_disconnect(self):
         with patch("src.api.v1.websocket.HandTracker") as factory:
             trackers = [Mock(), Mock(), Mock()]

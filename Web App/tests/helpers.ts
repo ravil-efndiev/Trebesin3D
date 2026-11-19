@@ -26,7 +26,7 @@ export const makeSocket = () => {
     socket.readyState = 1;
     socket.onopen?.(new Event("open"));
     const request = JSON.parse(sent.find((message) => typeof message === "string") as string);
-    receive({ type: "stream:started", requestId: request.requestId, protocolVersion: 2, streamId });
+    receive({ type: "stream:started", requestId: request.requestId, protocolVersion: 3, streamId });
   };
 
   return { socket, sent, receive, start, frames: () => sent.filter((message) => message instanceof Blob) };

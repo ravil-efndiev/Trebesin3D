@@ -66,7 +66,7 @@ def parse_object(text: str) -> dict:
 
 
 def is_version(value: object) -> bool:
-    return type(value) in (int, float) and value in (1, 2)
+    return type(value) in (int, float) and value in (1, 2, 3)
 
 
 def read_frame(packet: bytes, version: int) -> Frame:

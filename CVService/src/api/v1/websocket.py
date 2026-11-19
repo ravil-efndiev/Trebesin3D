@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from ...gestures import GestureMachine
 from ...tracking import HandTracker
 from .protocol import MAX_TEXT_BYTES, Frame, ProtocolError, decode_jpeg, is_id, is_version, parse_object, read_frame
 
@@ -21,25 +22,34 @@ FRAME_TIMEOUT = 2
 class StreamProcessor:
     def __init__(self):
         self.tracker = None
+        self.gestures = None
 
-    def start_tracking(self):
+    def start_tracking(self, version):
         self.tracker = HandTracker()
+        self.gestures = GestureMachine() if version == 3 else None
 
     def process(self, frame: Frame):
         image = decode_jpeg(frame)
         if image is None:
+            if self.gestures is not None:
+                self.gestures.reset()
             return None
 
         with image:
             if self.tracker is None:
                 return {"type": "frame:ack"}
 
-            return {"type": "tracking:result", "hands": self.tracker.detect(image)}
+            if self.gestures is None:
+                return {"type": "tracking:result", "hands": self.tracker.detect(image)}
+
+            hands, gesture = self.tracker.detect_gestures(image, self.gestures, frame.captured_at_ms)
+            return {"type": "tracking:result", "hands": hands, "gesture": gesture}
 
     def close(self):
         if self.tracker is not None:
             self.tracker.close()
             self.tracker = None
+            self.gestures = None
 
 
 async def send_json(websocket: WebSocket, message: dict):
@@ -125,9 +135,9 @@ async def stream_endpoint(websocket: WebSocket):
                     and is_version(control["protocolVersion"])
                 ):
                     version = int(control["protocolVersion"])
-                    if version == 2:
+                    if version >= 2:
                         try:
-                            await run_worker(processor.start_tracking, START_TIMEOUT)
+                            await run_worker(processor.start_tracking, START_TIMEOUT, version)
                         except Exception:
                             await send_error(
                                 websocket, "TRACKER_UNAVAILABLE", "Hand tracker unavailable. Check the model setup.",

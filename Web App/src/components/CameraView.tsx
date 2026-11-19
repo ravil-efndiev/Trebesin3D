@@ -10,7 +10,7 @@ const videoConstraints = {
 };
 
 const CameraView = () => {
-  const { webcamRef, overlayRef, enabled, status, start, stop, onUserMedia, onUserMediaError } = useCameraStream(streamUrl);
+  const { webcamRef, overlayRef, enabled, status, gestureText, start, stop, onUserMedia, onUserMediaError } = useCameraStream(streamUrl);
 
   return (
     <section className="mt-6 max-w-lg space-y-3" aria-label="Camera streaming">
@@ -36,6 +36,7 @@ const CameraView = () => {
         </button>
       </div>
       <p role="status" aria-live="polite">{ status.message }</p>
+      {status.phase === "streaming" && <p>{ gestureText || "Waiting for tracking…" }</p>}
       {enabled && (
         <div className="relative overflow-hidden rounded">
           <Webcam

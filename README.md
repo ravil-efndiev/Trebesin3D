@@ -2,7 +2,7 @@
 
 Interactive portfolio for school and personal projects. The planned experience uses camera-based hand tracking to interact with a Three.js scene.
 
-The React app streams opt-in camera capture to FastAPI through a local Vite proxy. CVService validates each JPEG, runs MediaPipe Hand Landmarker, and returns up to two sets of 21 joints. The browser connects those joints over the live preview. [Task 3 implementation and acceptance plan](docs/hand-tracking-plan.md). See [AGENTS.md](AGENTS.md) for requirements and development rules.
+The React app streams opt-in camera capture to FastAPI through a local Vite proxy. CVService validates each JPEG, runs MediaPipe Hand Landmarker, and returns up to two sets of 21 joints. The browser draws those joints and displays the gesture state recognized by CVService. [Task 3 implementation and acceptance plan](docs/hand-tracking-plan.md). See [AGENTS.md](AGENTS.md) for requirements and development rules.
 
 ## Requirements
 
@@ -73,6 +73,8 @@ CVService accepts `http://127.0.0.1:5173` and `http://localhost:5173` by default
 
 Select **Start camera** and allow camera access. The mirrored preview draws landmarks over your hand as you move. The browser samples fresh video frames at up to about 18 frames per second and sends unmirrored JPEGs at up to 640×480, with one frame in flight. Audio is disabled. The app processes frames in memory and neither records nor logs frames or tracking results.
 
+A line below the controls shows hand count, cursor or camera mode, and the current pan, rotation or zoom direction. Holding a camera pose still shows it as ready. A quick index bend in cursor mode reports a single selection event. [Gesture rules](docs/gesture-rules.md)
+
 An empty result clears the outline immediately, and a tracking sample expires 200 ms after capture. Hiding the tab pauses transmission, and returning starts a fresh stream. **Stop camera** releases the camera tracks and closes the stream.
 
 For measured fast-motion lag, browser and service timings, and the effect of changing capture rate or JPEG size, see the [hand-tracking performance analysis](docs/hand-tracking-performance.md).
@@ -99,7 +101,7 @@ For a browser check, run both apps and open [the live camera fixture](http://127
 
 ## Feature order
 
-1. Define gesture observations and benchmark the CV MVP on target hardware.
+1. Validate gesture observations and benchmark the CV MVP on target hardware.
 2. Build a basic scene with mouse/keyboard fallback.
 3. Map tracking observations into reliable scene controls.
 4. Add public admission and validate load, abuse handling, and transport security before deployment.

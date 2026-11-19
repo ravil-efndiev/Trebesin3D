@@ -1,3 +1,5 @@
+import type { Gesture } from "./gestures.ts";
+
 export interface StreamStatus {
   phase: "idle" | "camera" | "checking" | "connecting" | "starting" | "streaming" | "reconnecting" | "paused" | "error";
   message: string;
@@ -12,7 +14,7 @@ export interface CapturedFrame {
 
 export interface FrameHeader {
   type: "stream:frame";
-  protocolVersion: 2;
+  protocolVersion: 3;
   streamId: string;
   frameId: number;
   capturedAtMs: number;
@@ -26,15 +28,16 @@ export interface HandObservation {
 }
 
 export interface TrackingSample {
+  gesture: Gesture;
   hands: HandObservation[];
   width: number;
   height: number;
 }
 
 export type ServerMessage =
-  | { type: "stream:started"; requestId: string; protocolVersion: 2; streamId: string }
+  | { type: "stream:started"; requestId: string; protocolVersion: 3; streamId: string }
   | { type: "stream:stopped"; requestId: string; streamId: string }
-  | { type: "tracking:result"; streamId: string; frameId: number; hands: HandObservation[] }
+  | { type: "tracking:result"; streamId: string; frameId: number; gesture: Gesture; hands: HandObservation[] }
   | {
       type: "stream:error";
       code: string;

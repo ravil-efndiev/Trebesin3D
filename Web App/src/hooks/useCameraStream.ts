@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type Webcam from "react-webcam";
 import { checkServiceHealth } from "../utils/api.ts";
 import { createFrameCapture, createFrameScheduler, stopMediaTracks } from "../utils/camera.ts";
+import { gestureLabels, type Gesture } from "../utils/gestures.ts";
 import { drawHandOverlay } from "../utils/handOverlay.ts";
 import { validateStreamUrl } from "../utils/protocol.ts";
 import { createFrameStream } from "../utils/stream.ts";
@@ -15,6 +16,7 @@ export const useCameraStream = (url: string) => {
   const requestedRef = useRef(false);
   const cameraSessionRef = useRef(0);
   const removeMediaListeners = useRef(() => {});
+  const [gestureText, setGestureText] = useState("");
   const [enabled, setEnabled] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraSession, setCameraSession] = useState(0);
@@ -110,13 +112,23 @@ export const useCameraStream = (url: string) => {
       return;
     }
 
+    let lastGesture: Gesture | undefined;
+    let lastCount = 0;
     const getVideo = () => webcamRef.current?.video ?? null;
     const client = createFrameStream({
       url: validateStreamUrl(url, window.location.protocol),
       capture: createFrameCapture(getVideo),
       scheduleFrame: createFrameScheduler(getVideo),
       onStatus: reportStatus,
-      onTracking: (sample) => drawHandOverlay(overlayRef.current, sample),
+      onTracking: (sample) => {
+        drawHandOverlay(overlayRef.current, sample);
+        const count = sample?.hands.length ?? 0;
+        if (sample?.gesture === lastGesture && count === lastCount) return;
+
+        lastGesture = sample?.gesture;
+        lastCount = count;
+        setGestureText(sample ? `${count} ${count === 1 ? "hand" : "hands"} · ${gestureLabels[sample.gesture]}` : "");
+      },
       checkHealth: (signal) => checkServiceHealth(url, signal),
     });
     clientRef.current = client;
@@ -134,5 +146,5 @@ export const useCameraStream = (url: string) => {
     releaseMedia();
   }, [releaseMedia]);
 
-  return { webcamRef, overlayRef, enabled, status, start, stop, onUserMedia, onUserMediaError };
+  return { webcamRef, overlayRef, enabled, status, gestureText, start, stop, onUserMedia, onUserMediaError };
 };
