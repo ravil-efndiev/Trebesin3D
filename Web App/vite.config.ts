@@ -41,6 +41,10 @@ const cvProxy = (websocket: boolean, apiKey: string): ProxyOptions => ({
 
 const viteConfig = defineConfig(({ command, isPreview }): UserConfig => ({
   plugins: [react(), tailwindcss()],
+  optimizeDeps: {
+    include: ['react-dom/client', 'react-webcam', 'axios', 'lucide-react', 'three', '@react-three/fiber'],
+    holdUntilCrawlEnd: false,
+  },
   server: {
     host: '127.0.0.1',
     port: 5173,

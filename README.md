@@ -1,6 +1,6 @@
 # Trebesin 3D
 
-Interactive portfolio for school and personal projects. The planned experience uses camera-based hand tracking to interact with a Three.js scene.
+Interactive portfolio for school and personal projects. Three illustrative models float in a full-screen Three.js gallery. The upper-right panel controls the optional camera, with project details directly beneath it.
 
 The React app streams opt-in camera capture to FastAPI through a local Vite proxy. CVService validates each JPEG, runs MediaPipe Hand Landmarker, and returns up to two sets of 21 joints. The browser draws those joints and displays the gesture state recognized by CVService. [Task 3 implementation and acceptance plan](docs/hand-tracking-plan.md). See [AGENTS.md](AGENTS.md) for requirements and development rules.
 
@@ -69,11 +69,21 @@ Open [the local app](http://127.0.0.1:5173). Vite proxies `/api/health/` and `/a
 
 CVService accepts `http://127.0.0.1:5173` and `http://localhost:5173` by default. For other local clients, set `CV_ALLOWED_ORIGINS` to a comma-separated list of exact trusted origins. Use `VITE_CV_STREAM_URL` to point the browser at another authenticated proxy that serves both endpoints. HTTPS pages require `wss://`. [Streaming protocol and connection lifecycle](docs/streaming-protocol.md)
 
+## Exploring the gallery
+
+Hover or focus a project to inspect it. Click, tap, or press Enter to keep its details open. Drag a model to turn it. Tab reveals the keyboard project list, and the arrow keys turn the focused model. Escape, the close button, or a click in empty space clears a selection. Browsers without WebGL 2 show the project list directly. The portfolio works with the camera off.
+
+The three exhibits occupy stations spanning 29.5 world units in depth. Drag empty space to look around or scroll to travel. With the scene focused, W/S moves forward and back, A/D strafes, the arrow keys turn, and Home returns to the entrance.
+
+In camera mode, the scene consumes the service’s existing gesture observations. Point to inspect a model and bend the index finger to select the last pointed location. One open palm moves sideways at 9 world units per second or vertically at 6.75. Two extended fingers turn the camera in place through a full circle, reaching 1.85 radians per second in about 120 ms. Spreading or closing two open palms moves forward or backward along the current heading at 18 world units per second while the service reports motion. Returning to the rotation-ready pose slows the turn to a stop within 120 ms. Pan and zoom stop on their ready poses, and tracking loss or expiry stops all gesture motion immediately. An intentional selection stays open until dismissed. The fingertip’s unmirrored image coordinates map to the entire gallery, mirrored once horizontally. [Gesture contract](docs/gesture-rules.md)
+
 ## Camera hand tracking
 
 Select **Start camera** and allow camera access. The mirrored preview draws landmarks over your hand as you move. The browser samples fresh video frames at up to about 18 frames per second and sends unmirrored JPEGs at up to 640×480, with one frame in flight. Audio is disabled. The app processes frames in memory and neither records nor logs frames or tracking results.
 
-A line below the controls shows hand count, cursor or camera mode, and the current pan, rotation or zoom direction. Holding a camera pose still shows it as ready. A quick index bend in cursor mode reports a single selection event. [Gesture rules](docs/gesture-rules.md)
+Each hand uses one color for its joints and bones, saturated blue or purple. The overlay matches nearby palms between fresh samples to keep colors steady when observation order changes. Color assignments reset when tracking clears and do not identify anatomical left or right hands.
+
+The camera panel shows hand count, cursor or camera mode, and the current pan, rotation or zoom direction. Holding a camera pose still shows it as ready. A quick index bend in cursor mode reports a single selection event. [Gesture rules](docs/gesture-rules.md)
 
 An empty result clears the outline immediately, and a tracking sample expires 200 ms after capture. Hiding the tab pauses transmission, and returning starts a fresh stream. **Stop camera** releases the camera tracks and closes the stream.
 
@@ -93,17 +103,18 @@ Run the CVService tests from `CVService` after setting up the model. Use the sam
 
 For a browser check, run both apps and open [the live camera fixture](http://127.0.0.1:5173/tests/camera-stream.html?mode=live). Select **Start camera** to send generated video through CVService. Look for a moving outline and a rising `withHands` count. Use **Show / hide test hand** to check that the outline disappears and returns. The fixture uses a generated video track.
 
+The automatic scene fixture checks hover, tracking loss, selection, two-hand zoom, both overlay colors, turning, returning to the entrance, and camera cleanup. It uses generated video and a mock socket. Run it in a foreground tab at 1280 × 800 or 360 × 740. [Run the scene check](http://127.0.0.1:5173/tests/camera-stream.html?mode=scene)
+
 ## Development notes
 
-- The frontend uses React, TypeScript, Vite, and Tailwind CSS. Write Tailwind utility classes directly in JSX. Keep global defaults in `@layer base` in `Web App/src/index.css`.
+- The frontend uses React, TypeScript, Vite, Tailwind CSS, and Lucide React icons. React Three Fiber renders the Three.js gallery. Each exhibit uses one combined mesh for rendering and picking. The scene consumes fresh tracking observations independently of camera capture and rendering cadence. Write Tailwind utility classes directly in JSX. Keep global defaults in `@layer base` in `Web App/src/index.css`.
 - `CVService/requirements.in` lists direct dependencies. The lock was generated on Windows with Python 3.14. Verify native packages on your platform before claiming support. Use only the pinned `opencv-contrib-python` distribution.
 - After changing Python dependencies, run `pip check` and import checks, then regenerate the lock body with `python -m pip freeze --exclude pip` using the virtual environment. Preserve the lock header and review the diff.
 
 ## Feature order
 
-1. Validate gesture observations and benchmark the CV MVP on target hardware.
-2. Build a basic scene with mouse/keyboard fallback.
-3. Map tracking observations into reliable scene controls.
-4. Add public admission and validate load, abuse handling, and transport security before deployment.
+1. Benchmark the integrated scene and tracking on supported hardware.
+2. Refine gesture mappings and project content using those measurements.
+3. Add public admission and validate load, abuse handling, and transport security before deployment.
 
 Keep the CV service independent of portfolio content. Target 60 FPS with a documented 30 FPS minimum quality mode. Rendering must continue when tracking or the connection slows. Cloud hosting and a separate application backend are deferred.

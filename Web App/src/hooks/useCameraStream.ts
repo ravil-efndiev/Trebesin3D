@@ -6,9 +6,9 @@ import { gestureLabels, type Gesture } from "../utils/gestures.ts";
 import { drawHandOverlay } from "../utils/handOverlay.ts";
 import { validateStreamUrl } from "../utils/protocol.ts";
 import { createFrameStream } from "../utils/stream.ts";
-import type { StreamStatus } from "../utils/types.ts";
+import type { StreamOptions, StreamStatus } from "../utils/types.ts";
 
-export const useCameraStream = (url: string) => {
+export const useCameraStream = (url: string, onTracking?: StreamOptions["onTracking"]) => {
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const webcamRef = useRef<Webcam>(null);
   const mediaRef = useRef<MediaStream | null>(null);
@@ -122,6 +122,7 @@ export const useCameraStream = (url: string) => {
       onStatus: reportStatus,
       onTracking: (sample) => {
         drawHandOverlay(overlayRef.current, sample);
+        onTracking?.(sample);
         const count = sample?.hands.length ?? 0;
         if (sample?.gesture === lastGesture && count === lastCount) return;
 
@@ -137,7 +138,7 @@ export const useCameraStream = (url: string) => {
       client.stop();
       if (clientRef.current === client) clientRef.current = null;
     };
-  }, [enabled, cameraReady, visible, url, reportStatus]);
+  }, [enabled, cameraReady, visible, url, reportStatus, onTracking]);
 
   useEffect(() => () => {
     requestedRef.current = false;

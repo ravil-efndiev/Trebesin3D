@@ -2,6 +2,7 @@ import handFixtureUrl from "../../tests/fixtures/pointing_up.jpg?url";
 import { makeSocket } from "./helpers.ts";
 import apiClient from "../src/utils/api.ts";
 import { parseServerMessage } from "../src/utils/protocol.ts";
+import type { Gesture } from "../src/utils/gestures.ts";
 
 // Development-only fixture, not imported by the production app or build.
 const mode = new URLSearchParams(location.search).get("mode") ?? "success";
@@ -16,6 +17,8 @@ const mockLandmarks = [
 ].map(([x, y]) => [x, y, 0]);
 
 let showHand = true;
+let sceneGesture: Gesture = "cursor";
+const secondHand = mockLandmarks.map(([x, y, z]) => [0.42 * x, y, z]);
 document.getElementById("toggle-hand")!.onclick = () => { showHand = !showHand; };
 
 const metrics = { cameraRequests: 0, connections: 0, frames: 0, pending: 0, maxPending: 0, validJpegs: 0, results: 0, withHands: 0, failures: 0 };
@@ -138,8 +141,11 @@ if (mode === "live") {
 
                 pending--;
                 metrics.pending--;
-                peer.receive({ type: "tracking:result", gesture: showHand ? "pan_ready" : "idle", hands: showHand ? [{ landmarks: mockLandmarks }] : [], streamId, frameId: header.frameId });
-              }, 80);
+                const pose = mode === "scene" ? sceneGesture : "pan_ready";
+                const hands = !showHand ? [] : pose === "zoom_in" ? [{ landmarks: mockLandmarks }, { landmarks: secondHand }] : [{ landmarks: mockLandmarks }];
+                if (sceneGesture === "select") sceneGesture = "cursor";
+                peer.receive({ type: "tracking:result", gesture: showHand ? pose : "idle", hands, streamId, frameId: header.frameId });
+              }, mode === "scene" ? 5 : 80);
             }
           } catch {
             metrics.failures++;
@@ -187,3 +193,8 @@ setInterval(() => {
 }, 100);
 
 await import("../src/main.tsx");
+
+if (mode === "scene") {
+  const { checkScene } = await import("./scene-browser.ts");
+  await checkScene(mockLandmarks[8], (visible) => { showHand = visible; }, (gesture) => { sceneGesture = gesture; }, tracks);
+}

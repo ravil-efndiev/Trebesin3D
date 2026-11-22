@@ -1,6 +1,8 @@
+import { Camera, CameraOff, Video, VideoOff } from "lucide-react";
 import Webcam from "react-webcam";
 import { useCameraStream } from "../hooks/useCameraStream.ts";
 import { config } from "../utils/config.ts";
+import type { StreamOptions } from "../utils/types.ts";
 
 const socketProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
 const streamUrl = import.meta.env.VITE_CV_STREAM_URL || `${socketProtocol}//${window.location.host}${config.streamPath}`;
@@ -9,36 +11,24 @@ const videoConstraints = {
   height: { ideal: config.maxFrameHeight },
 };
 
-const CameraView = () => {
-  const { webcamRef, overlayRef, enabled, status, gestureText, start, stop, onUserMedia, onUserMediaError } = useCameraStream(streamUrl);
+interface Props {
+  onTracking: StreamOptions["onTracking"];
+}
+
+const CameraView = ({ onTracking }: Props) => {
+  const { webcamRef, overlayRef, enabled, status, gestureText, start, stop, onUserMedia, onUserMediaError } = useCameraStream(streamUrl, onTracking);
+  const streaming = status.phase === "streaming";
 
   return (
-    <section className="mt-6 max-w-lg space-y-3" aria-label="Camera streaming">
-      <h2 className="text-lg font-semibold">Camera streaming</h2>
-      <p>Starting the camera sends JPEG frames to the CV service below. Audio is off; frames are not recorded by this app.</p>
-      <p className="break-all text-sm">Service: { streamUrl }</p>
-      <div className="flex gap-3">
-        <button
-          type="button"
-          className="rounded bg-violet-600 px-4 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
-          onClick={ start }
-          disabled={ enabled }
-        >
-          Start camera
-        </button>
-        <button
-          type="button"
-          className="rounded border px-4 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
-          onClick={ stop }
-          disabled={ !enabled }
-        >
-          Stop camera
-        </button>
-      </div>
-      <p role="status" aria-live="polite">{ status.message }</p>
-      {status.phase === "streaming" && <p>{ gestureText || "Waiting for tracking…" }</p>}
-      {enabled && (
-        <div className="relative overflow-hidden rounded">
+    <section className="overflow-hidden rounded-[4px] border border-edge bg-panel shadow-lg" aria-label="Camera streaming">
+      <header className="flex items-center justify-between gap-2 border-b border-edge bg-raised px-3 py-2.5">
+        <h2 className="flex items-center gap-2 text-sm font-semibold"><Camera size={ 16 } className="text-ice" aria-hidden="true" />Camera</h2>
+        <span className="flex items-center gap-1.5 font-mono text-xs text-muted">
+          <i className={ `size-1.5 rounded-full ${streaming ? "bg-ice" : "bg-slate-500"}` } />{ streaming ? "Live" : enabled ? "On" : "Off" }
+        </span>
+      </header>
+      { enabled ? (
+        <div className="relative overflow-hidden bg-black">
           <Webcam
             ref={ webcamRef }
             audio={ false }
@@ -51,7 +41,18 @@ const CameraView = () => {
           />
           <canvas ref={ overlayRef } aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full -scale-x-100" />
         </div>
-      )}
+      ) : (
+        <div className="flex items-center gap-2.5 bg-[#0b1421] px-3 py-3.5 text-muted">
+          <CameraOff size={ 20 } strokeWidth={ 1.4 } aria-hidden="true" className="shrink-0 text-[#839caf]" />
+          <p className="text-xs leading-relaxed" title={ streamUrl }>Starting sends camera frames to CVService. Audio is off.</p>
+        </div>
+      ) }
+      <div className="space-y-2.5 border-t border-edge px-3 py-3">
+        <p role="status" aria-live="polite" className={ status.phase === "idle" ? "sr-only" : "text-xs leading-relaxed text-muted" }>{ status.message }{ streaming && <span className="block text-ice">{ gestureText || "Waiting for tracking…" }</span> }</p>
+        <button type="button" onClick={ enabled ? stop : start } className="flex min-h-9 w-full items-center justify-center gap-2 rounded-sm border border-[#465a71] bg-[#203146] px-2 text-sm font-medium whitespace-nowrap text-ice hover:bg-[#2c4159]">
+          { enabled ? <VideoOff size={ 15 } aria-hidden="true" /> : <Video size={ 15 } aria-hidden="true" /> }{ enabled ? "Stop camera" : "Start camera" }
+        </button>
+      </div>
     </section>
   );
 };
