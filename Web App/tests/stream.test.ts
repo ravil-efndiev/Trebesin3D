@@ -347,24 +347,26 @@ test("tracking displays only a fresh matching sample and clears it at capture ag
   t.mock.method(performance, "now", () => now);
   const peer = makeSocket();
   const samples: unknown[] = [];
+  const receipts: unknown[] = [];
   const hands = [{ landmarks: Array.from({ length: 21 }, () => [0.5, 0.5, 0]) }];
   const client = createFrameStream({
     url: "ws://localhost/api/v1/stream", createSocket: () => peer.socket, onStatus: () => {},
     capture: async () => makeFrame(now), onTracking: (sample) => samples.push(sample),
+    onSelectReceipt: (receipt) => receipts.push(receipt),
   });
   t.after(client.stop);
   peer.start();
   t.mock.timers.tick(100);
   await Promise.resolve();
   const receive = (frameId: number, streamId = "test-stream") => {
-    peer.receive({ type: "tracking:result", gesture: "cursor", hands, streamId, frameId });
+    peer.receive({ type: "tracking:result", gesture: "select", hands, streamId, frameId });
   };
 
   now += 50;
   receive(1, "other");
   assert.deepEqual(samples, []);
   receive(1);
-  assert.deepEqual(samples.at(-1), { gesture: "cursor", hands, width: 640, height: 480 });
+  assert.deepEqual(samples.at(-1), { gesture: "select", hands, width: 640, height: 480 });
   t.mock.timers.tick(149);
   assert.notEqual(samples.at(-1), null);
   t.mock.timers.tick(1);
@@ -378,6 +380,12 @@ test("tracking displays only a fresh matching sample and clears it at capture ag
   await Promise.resolve();
   receive(3);
   assert.notEqual(samples.at(-1), null);
+  assert.deepEqual(receipts, [
+    { frameId: 1, status: "unmatched" },
+    { frameId: 1, status: "fresh" },
+    { frameId: 2, status: "expired" },
+    { frameId: 3, status: "fresh" },
+  ]);
   client.stop();
   assert.equal(samples.at(-1), null);
 });

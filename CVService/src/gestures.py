@@ -1,10 +1,12 @@
 """Per-stream gesture recognition from MediaPipe hand observations."""
 from dataclasses import dataclass
-from math import dist, hypot, isfinite
+from math import acos, degrees, dist, hypot, isfinite
 
 
 MAX_SAMPLE_GAP_MS = 200
-BEND_WINDOW_MS = 160
+BEND_WINDOW_MS = 280
+BEND_START_DEGREES = 12
+BEND_TRIGGER_DEGREES = 25
 MOTION_HOLD_MS = 100
 MOTION_PALM_FRACTION = 0.08
 
@@ -17,7 +19,18 @@ class HandPose:
     fingers: tuple[bool, ...]
     index_straight: bool
     index_bent: bool
+    index_angles: tuple[float, float]
     facing_camera: bool
+
+
+def joint_bend(before, joint, after):
+    incoming = [b - a for a, b in zip(before, joint)]
+    outgoing = [b - a for a, b in zip(joint, after)]
+    lengths = hypot(*incoming) * hypot(*outgoing)
+    if lengths < 1e-8:
+        return 0.0
+    cosine = sum(a * b for a, b in zip(incoming, outgoing)) / lengths
+    return degrees(acos(max(-1.0, min(1.0, cosine))))
 
 
 def classify_hand(world, image_points, side, aspect_y):
@@ -60,8 +73,10 @@ def classify_hand(world, image_points, side, aspect_y):
     center = (sum(p[0] for p in palm) / 5, aspect_y * sum(p[1] for p in palm) / 5)
     width = hypot(image_points[5][0] - image_points[17][0],
                   aspect_y * (image_points[5][1] - image_points[17][1]))
-    index_bent = ratios[1] <= 0.72 or dist(world[8], world[0]) <= dist(world[5], world[0]) + 0.05 * palm_width
-    return HandPose(side, center, width, tuple(fingers), ratios[1] >= 0.93, index_bent, facing)
+    # Leave a gap between arming and firing so jitter around extension cannot click.
+    index_bent = ratios[1] <= 0.84 or dist(world[8], world[0]) <= dist(world[5], world[0]) + 0.05 * palm_width
+    index_angles = (joint_bend(*world[5:8]), joint_bend(*world[6:9]))
+    return HandPose(side, center, width, tuple(fingers), ratios[1] >= 0.90, index_bent, index_angles, facing)
 
 
 class GestureMachine:
@@ -72,6 +87,7 @@ class GestureMachine:
         self.last_sample_ms = None
         self.last_hand = None
         self.extended_at = None
+        self.index_reference = None
         self.control = "idle"
         self.anchor = None
         self.direction = "ready"
@@ -104,23 +120,35 @@ class GestureMachine:
                 return self._motion("rotate", hand.center, hand.width, captured_at_ms)
 
             self.control = "idle"
-            if hand.fingers == (False, True, False, False, False):
-                if hand.index_straight:
-                    self.extended_at = captured_at_ms
-                return "cursor"
-
-            if not any(hand.fingers) and self.extended_at is not None:
-                if captured_at_ms - self.extended_at <= BEND_WINDOW_MS:
-                    if not hand.index_bent:
-                        return "idle"
-                    self.extended_at = None
-                    return "select"
+            if hand.fingers == (False, True, False, False, False) or not any(hand.fingers):
+                return self._index_gesture(hand, captured_at_ms)
 
         self.reset()
         return "idle"
 
+    def _index_gesture(self, hand, now):
+        # Compare each joint against the pointing pose. The distal joint can start
+        # noticeably bent while the hand still looks like it is pointing.
+        bend = 0.0
+        if self.index_reference is not None:
+            bend = max(angle - reference for angle, reference in zip(hand.index_angles, self.index_reference))
+        click_pose = bend >= BEND_TRIGGER_DEGREES or (not hand.fingers[1] and hand.index_bent)
+        if self.extended_at is not None and now - self.extended_at <= BEND_WINDOW_MS and click_pose:
+            self.extended_at = None
+            return "select"
+
+        if hand.fingers[1] and bend < BEND_START_DEGREES and not click_pose:
+            if hand.index_straight:
+                if self.index_reference is None:
+                    self.index_reference = hand.index_angles
+                self.extended_at = now
+            return "cursor"
+
+        return "idle"
+
     def _motion(self, control, position, width, now):
         self.extended_at = None
+        self.index_reference = None
         if self.control != control:
             self.control = control
             self.anchor = position

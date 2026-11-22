@@ -7,6 +7,7 @@ import GalleryWorld from "./GalleryWorld.tsx";
 interface Props {
   input: SceneInput;
   active: ProjectId | null;
+  selected: ProjectId | null;
   onHover: (id: ProjectId | null) => void;
   onSelect: (id: ProjectId | null) => void;
   onFocus: (id: ProjectId | null) => void;
@@ -20,7 +21,7 @@ class RendererBoundary extends Component<{ children: ReactNode; onUnavailable: (
   render = () => this.state.failed ? null : this.props.children;
 }
 
-const PortfolioScene = ({ input, active, onHover, onSelect, onFocus }: Props) => {
+const PortfolioScene = ({ input, active, selected, onHover, onSelect, onFocus }: Props) => {
   const cursor = useRef<HTMLSpanElement>(null);
   const rotations = useRef({ helix: -0.48, phase: -0.32, house: -0.52 });
   const [available, setAvailable] = useState(true);
@@ -36,7 +37,7 @@ const PortfolioScene = ({ input, active, onHover, onSelect, onFocus }: Props) =>
         { available && (
           <RendererBoundary onUnavailable={ unavailable }>
             <Canvas dpr={ [1, 1.5] } camera={ { position: [0, 0, homeDepth], fov: fieldOfView, near: 0.1, far: 100 } } gl={ { antialias: true, alpha: false } }>
-              <GalleryWorld input={ input } active={ active } rotations={ rotations } cursor={ cursor } onHover={ onHover } onSelect={ onSelect } onUnavailable={ unavailable } />
+              <GalleryWorld input={ input } active={ active } selected={ selected } rotations={ rotations } cursor={ cursor } onHover={ onHover } onSelect={ onSelect } onUnavailable={ unavailable } />
             </Canvas>
           </RendererBoundary>
         ) }

@@ -13,10 +13,11 @@ const videoConstraints = {
 
 interface Props {
   onTracking: StreamOptions["onTracking"];
+  onSelectReceipt?: StreamOptions["onSelectReceipt"];
 }
 
-const CameraView = ({ onTracking }: Props) => {
-  const { webcamRef, overlayRef, enabled, status, gestureText, start, stop, onUserMedia, onUserMediaError } = useCameraStream(streamUrl, onTracking);
+const CameraView = ({ onTracking, onSelectReceipt }: Props) => {
+  const { webcamRef, overlayRef, enabled, status, gestureText, start, stop, onUserMedia, onUserMediaError } = useCameraStream(streamUrl, onTracking, onSelectReceipt);
   const streaming = status.phase === "streaming";
 
   return (

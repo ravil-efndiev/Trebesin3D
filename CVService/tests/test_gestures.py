@@ -1,10 +1,10 @@
 import unittest
-from dataclasses import replace
+from math import cos, radians, sin
 
 from src.gestures import GestureMachine, classify_hand
 
 
-def hand(fingers, x=0.5, y=0.5, side="Right", back=False):
+def hand_joints(fingers, side="Right", back=False, index_offsets=None):
     # Joint chains in meters, with the wrist below the knuckles in camera axes.
     world = [(0, 0.075, 0)]
     if 0 in fingers:
@@ -13,15 +13,38 @@ def hand(fingers, x=0.5, y=0.5, side="Right", back=False):
         world += [(0.04, 0.05, 0), (0.06, 0.03, 0), (0.05, 0.018, 0), (0.026, 0.018, 0)]
     for finger, knuckle_x in enumerate((0.04, 0.012, -0.015, -0.04), 1):
         offsets = (0, -0.025, -0.047, -0.065) if finger in fingers else (0, -0.025, 0.01, 0.025)
-        world.extend((knuckle_x, offset, 0) for offset in offsets)
+        if finger == 1 and index_offsets is not None:
+            world.extend((knuckle_x, y, z) for y, z in index_offsets)
+        else:
+            world.extend((knuckle_x, offset, 0) for offset in offsets)
 
     if (side == "Left") != back:
         world = [(-a, b, c) for a, b, c in world]
+    return world
+
+
+def hand(fingers, x=0.5, y=0.5, side="Right", back=False, index_offsets=None):
+    world = hand_joints(fingers, side, back, index_offsets)
     points = [(x + a, y + b / 0.75, c) for a, b, c in world]
     return classify_hand(world, points, side, 0.75)
 
 
 OPEN = range(5)
+
+
+def index_hinge(joint, angle):
+    y = z = 0.0
+    points = [(y, z)]
+    for segment, length in enumerate((0.025, 0.022, 0.018), 1):
+        tilt = radians(angle) if segment >= joint else 0
+        y -= length * cos(tilt)
+        z -= length * sin(tilt)
+        points.append((y, z))
+    return points
+
+
+PARTIAL_INDEX = index_hinge(2, 19)
+BENT_INDEX = index_hinge(2, 32)
 
 
 class GestureTests(unittest.TestCase):
@@ -74,11 +97,31 @@ class GestureTests(unittest.TestCase):
         for i, (fingers, result) in enumerate(sequence):
             self.assertEqual(self.machine.update([hand(fingers)], i * 60), result)
 
-        partial = replace(hand([]), index_bent=False)
+        partial = hand([], index_offsets=PARTIAL_INDEX)
         self.assertEqual(self.machine.update([hand([1])], 300), "cursor")
-        for t in (360, 420, 480):
+        for t in (360, 420, 480, 540):
             self.assertEqual(self.machine.update([partial], t), "idle")
-        self.assertEqual(self.machine.update([hand([])], 530), "idle")
+        self.assertEqual(self.machine.update([hand([])], 590), "idle")
+
+    def test_index_can_bend_in_depth_across_intermediate_frames(self):
+        partial = hand([], index_offsets=PARTIAL_INDEX)
+        bent = hand([], index_offsets=BENT_INDEX)
+        self.assertFalse(partial.index_bent)
+        self.assertFalse(bent.index_bent)
+        self.assertTrue(bent.fingers[1])
+        self.assertEqual(self.machine.update([hand([1])], 0), "cursor")
+        self.assertEqual(self.machine.update([partial], 70), "idle")
+        self.assertEqual(self.machine.update([partial], 140), "idle")
+        self.assertEqual(self.machine.update([bent], 210), "select")
+        self.assertEqual(self.machine.update([bent], 280), "idle")
+
+    def test_distal_joint_alone_clicks_relative_to_a_curved_pointing_pose(self):
+        pointing = hand([], index_offsets=index_hinge(3, 30))
+        jitter = hand([], index_offsets=index_hinge(3, 38))
+        bent = hand([], index_offsets=index_hinge(3, 57))
+        for i, (pose, expected) in enumerate(((pointing, "cursor"), (jitter, "cursor"), (bent, "select"),
+                                               (bent, "idle"), (pointing, "cursor"), (bent, "select"))):
+            self.assertEqual(self.machine.update([pose], i * 60), expected)
 
     def test_loss_stale_sample_and_hand_substitution_cancel_actions(self):
         for lost in ([], [None], [hand([1]), hand([])]):

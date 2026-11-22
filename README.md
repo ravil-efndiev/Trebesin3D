@@ -73,9 +73,11 @@ CVService accepts `http://127.0.0.1:5173` and `http://localhost:5173` by default
 
 Hover or focus a project to inspect it. Click, tap, or press Enter to keep its details open. Drag a model to turn it. Tab reveals the keyboard project list, and the arrow keys turn the focused model. Escape, the close button, or a click in empty space clears a selection. Browsers without WebGL 2 show the project list directly. The portfolio works with the camera off.
 
-The three exhibits occupy stations spanning 29.5 world units in depth. Drag empty space to look around or scroll to travel. With the scene focused, W/S moves forward and back, A/D strafes, the arrow keys turn, and Home returns to the entrance.
+The three exhibits occupy stations spanning 29.5 world units in depth. Drag empty space to orbit or scroll to travel. With the scene focused, W/S moves forward and back, A/D strafes, the arrow keys orbit, and Home resets the camera and pivot.
 
-In camera mode, the scene consumes the service’s existing gesture observations. Point to inspect a model and bend the index finger to select the last pointed location. One open palm moves sideways at 9 world units per second or vertically at 6.75. Two extended fingers turn the camera in place through a full circle, reaching 1.85 radians per second in about 120 ms. Spreading or closing two open palms moves forward or backward along the current heading at 18 world units per second while the service reports motion. Returning to the rotation-ready pose slows the turn to a stop within 120 ms. Pan and zoom stop on their ready poses, and tracking loss or expiry stops all gesture motion immediately. An intentional selection stays open until dismissed. The fingertip’s unmirrored image coordinates map to the entire gallery, mirrored once horizontally. [Gesture contract](docs/gesture-rules.md)
+Selecting an exhibit brings the camera in close and locks the orbit pivot to the exhibit. Move an open palm sideways or use the two-finger turn gesture to orbit horizontally. Move an open palm up or down to orbit vertically. Two-hand zoom adjusts the viewing distance. Click away, press Escape, or close the details to return to the camera position and angle from before selection.
+
+In camera mode, the scene consumes the service’s existing gesture observations. Point to inspect a model and bend the index finger to select the last pointed location. One open palm pans the camera and its orbit pivot sideways at 9 world units per second or vertically at 6.75. Two extended fingers orbit the camera around the center of the exhibits, reaching 1.85 radians per second in about 120 ms. The orbit shortens near walls to keep the camera inside the hall. Spreading or closing two open palms adjusts the orbit distance at 18 world units per second while the service reports motion. Returning to the rotation-ready pose slows the turn to a stop within 120 ms. Pan and zoom stop on their ready poses, and tracking loss or expiry stops all gesture motion immediately. An intentional selection stays open until dismissed. The fingertip’s unmirrored image coordinates map to the entire gallery, mirrored once horizontally. [Gesture contract](docs/gesture-rules.md)
 
 ## Camera hand tracking
 
@@ -84,6 +86,8 @@ Select **Start camera** and allow camera access. The mirrored preview draws land
 Each hand uses one color for its joints and bones, saturated blue or purple. The overlay matches nearby palms between fresh samples to keep colors steady when observation order changes. Color assignments reset when tracking clears and do not identify anatomical left or right hands.
 
 The camera panel shows hand count, cursor or camera mode, and the current pan, rotation or zoom direction. Holding a camera pose still shows it as ready. A quick index bend in cursor mode reports a single selection event. [Gesture rules](docs/gesture-rules.md)
+
+Open the gallery with `?debug=select` to see how many valid select results the browser has received, the last frame and arrival time, and whether the scene used it to pick an exhibit. The readout stays visible after the gesture and resets on reload. [Open select debug](http://127.0.0.1:5173/?debug=select)
 
 An empty result clears the outline immediately, and a tracking sample expires 200 ms after capture. Hiding the tab pauses transmission, and returning starts a fresh stream. **Stop camera** releases the camera tracks and closes the stream.
 

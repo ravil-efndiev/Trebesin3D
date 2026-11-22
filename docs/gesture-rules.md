@@ -27,7 +27,7 @@ The scene camera is controlled using one-hand and two-hand gestures. When one fi
 - The cursor's 2D screen position is used for raycasting into the 3D scene.
 
 ### Object Selection
-- While in Cursor Mode, quickly bending the extended index finger triggers object selection.
-- A ray is cast from the camera through the cursor's current screen position.
+- While pointing, curl the tip or middle joint of the index finger. A bend of about 25° from the pointing pose at either joint triggers selection.
+- The cursor stops updating as the bend starts. The scene uses the last pointing position to pick an object.
 - If the ray intersects a selectable object, that object is selected.
 - Each finger-bending gesture triggers only one selection event.

@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Box3, Mesh, MeshBasicMaterial, PerspectiveCamera, Vector2, Vector3 } from "three";
 import { projectGeometry } from "../src/scene/geometry.ts";
-import { createPicker, homeView, moveView, turnView } from "../src/scene/interaction.ts";
+import { createPicker, focusView, homeView, moveFocus, moveView, positionCamera, positionFocusCamera, turnView } from "../src/scene/interaction.ts";
 import { fieldOfView, galleryLayout, hall, homeDepth, projects } from "../src/scene/projects.ts";
 import { createSceneInput } from "../src/scene/handInput.ts";
 import type { Gesture } from "../src/utils/gestures.ts";
 import type { TrackingSample } from "../src/utils/types.ts";
+
+const homePivot = galleryLayout(1280, 800).pivot;
 
 const observation = (gesture: Gesture, x = 0.25, y = 0.75): TrackingSample => {
   const landmarks: [number, number, number][] = Array.from({ length: 21 }, () => [0.5, 0.5, 0]);
@@ -49,18 +51,20 @@ test("expiry, empty results and switching to camera mode disarm a bend and disca
 
 test("pan, turning and dolly use elapsed time, stop on tracking loss, and stay inside the hall", () => {
   for (const gesture of ["pan_left", "pan_right", "pan_up", "pan_down", "rotate_left", "rotate_right", "zoom_in", "zoom_out"] as const) {
-    const fast = homeView();
-    const slow = homeView();
+    const fast = homeView(homePivot);
+    const slow = homeView(homePivot);
     for (let i = 0; i < 60; i++) moveView(fast, gesture, 1 / 60, -6);
     for (let i = 0; i < 30; i++) moveView(slow, gesture, 1 / 30, -6);
-    for (const key of ["x", "y", "yaw", "z"] as const) assert.ok(Math.abs(fast[key] - slow[key]) < 1e-10);
-    assert.notDeepEqual(fast, homeView());
+    for (const key of ["pivotX", "pivotZ", "offsetX", "offsetZ", "y", "yaw"] as const) assert.ok(Math.abs(fast[key] - slow[key]) < 1e-10);
+    assert.notDeepEqual(fast, homeView(homePivot));
     const stopped = { ...fast, turnSpeed: 0 };
     for (const ready of ["idle", "pan_ready", "rotate_ready", "zoom_ready", "cursor", "select"] as const) moveView(fast, ready, 0.05, -6);
     assert.deepEqual(fast, stopped);
     for (let i = 0; i < 1000; i++) moveView(fast, gesture, 1, -6);
-    assert.ok(Math.abs(fast.x) <= hall.halfWidth - hall.clearance && Math.abs(fast.yaw) <= Math.PI);
-    assert.ok(Math.abs(fast.z) <= hall.halfDepth - hall.clearance);
+    const camera = new PerspectiveCamera();
+    positionCamera(fast, camera);
+    assert.ok(Math.abs(camera.position.x) <= hall.halfWidth - hall.clearance + 1e-9 && Math.abs(fast.yaw) <= Math.PI);
+    assert.ok(Math.abs(camera.position.z) <= hall.halfDepth - hall.clearance + 1e-9);
     assert.ok(fast.y >= -6 + hall.clearance && fast.y <= -6 + hall.height - hall.clearance);
   }
 });
@@ -68,7 +72,7 @@ test("pan, turning and dolly use elapsed time, stop on tracking loss, and stay i
 test("hand turning ramps up and brakes in the ready pose at either frame rate", () => {
   for (const gesture of ["rotate_left", "rotate_right"] as const) {
     const angles = [30, 60].map((fps) => {
-      const view = homeView();
+      const view = homeView(homePivot);
       const direction = gesture === "rotate_right" ? 1 : -1;
       const step = 1 / fps;
       moveView(view, gesture, step, -6);
@@ -91,28 +95,87 @@ test("hand turning ramps up and brakes in the ready pose at either frame rate", 
 });
 
 test("open-palm panning moves at 9 horizontal and 6.75 vertical units per second", () => {
-  const view = homeView();
+  const view = homeView(homePivot);
   for (let frame = 0; frame < 30; frame++) moveView(view, "pan_right", 1 / 30, -6);
   for (let frame = 0; frame < 30; frame++) moveView(view, "pan_up", 1 / 30, -6);
-  assert.ok(Math.abs(view.x - 9) < 1e-9);
+  assert.ok(Math.abs(view.pivotX - homePivot.x - 9) < 1e-9);
   assert.ok(Math.abs(view.y - 6.75) < 1e-9);
 });
 
-test("a short zoom moves several units, and turning changes heading without orbiting the exhibits", () => {
-  const view = homeView();
+test("rotation orbits the panned pivot and zoom changes radius without moving it", () => {
+  const view = homeView(homePivot);
+  const camera = new PerspectiveCamera();
+  positionCamera(view, camera);
+  assert.deepEqual(camera.position.toArray(), [0, 0, homeDepth]);
+  const startRadius = Math.hypot(view.offsetX, view.offsetZ);
   for (let i = 0; i < 15; i++) moveView(view, "zoom_in", 1 / 60, -6);
-  assert.ok(Math.abs(view.z - (homeDepth - 4.5)) < 1e-9);
-  const z = view.z;
-  for (let i = 0; i < 60; i++) moveView(view, "rotate_right", 1 / 60, -6);
-  assert.ok(Math.abs(view.yaw - 1.85 * (1 - 0.12 / 2)) < 1e-9);
-  assert.equal(view.x, 0);
-  assert.ok(Math.abs(view.z - z) < 1e-9);
-  turnView(view, 4 * Math.PI + Math.PI / 2 - view.yaw);
-  moveView(view, "zoom_in", 0.05, -6);
-  assert.ok(Math.abs(view.x - 0.9) < 1e-9);
-  assert.ok(Math.abs(view.z - z) < 1e-9);
+  const zoomedRadius = Math.hypot(view.offsetX, view.offsetZ);
+  assert.ok(Math.abs(zoomedRadius - (startRadius - 4.5)) < 1e-9);
+
   moveView(view, "pan_right", 0.05, -6);
-  assert.ok(Math.abs(view.z - z - 0.45) < 1e-9);
+  moveView(view, "pan_up", 0.05, -6);
+  assert.ok(Math.abs(view.pivotX - homePivot.x - 0.45) < 1e-9);
+  assert.equal(view.pivotZ, homePivot.z);
+  positionCamera(view, camera);
+  const beforeTurn = camera.position.clone();
+  turnView(view, Math.PI);
+  positionCamera(view, camera);
+  assert.ok(Math.abs(camera.position.x + beforeTurn.x - 2 * view.pivotX) < 1e-9);
+  assert.ok(Math.abs(camera.position.z + beforeTurn.z - 2 * view.pivotZ) < 1e-9);
+  assert.equal(camera.position.y, beforeTurn.y);
+  assert.ok(Math.abs(Math.hypot(view.offsetX, view.offsetZ) - zoomedRadius) < 1e-9);
+  turnView(view, Math.PI);
+  positionCamera(view, camera);
+  assert.ok(camera.position.distanceTo(beforeTurn) < 1e-9);
+});
+
+test("an offset orbit stays inside the hall without losing its radius at the wall", () => {
+  const view = homeView(homePivot);
+  const camera = new PerspectiveCamera();
+  const radius = Math.hypot(view.offsetX, view.offsetZ);
+  for (let i = 0; i < 100; i++) moveView(view, "pan_right", 0.08, -6);
+  for (let i = 0; i < 36; i++) {
+    turnView(view, Math.PI / 18);
+    positionCamera(view, camera);
+    assert.ok(Math.abs(camera.position.x) <= hall.halfWidth - hall.clearance + 1e-9);
+    assert.ok(Math.abs(camera.position.z) <= hall.halfDepth - hall.clearance + 1e-9);
+    assert.ok(Math.abs(Math.hypot(view.offsetX, view.offsetZ) - radius) < 1e-9);
+  }
+});
+
+test("selection frames a fixed exhibit, supports both orbit gestures and preserves the overview pose", () => {
+  const camera = new PerspectiveCamera();
+  const overview = homeView(homePivot);
+  turnView(overview, 0.43);
+  moveView(overview, "pan_up", 0.05, -6);
+  positionCamera(overview, camera);
+  const previousPosition = camera.position.clone();
+  const previousRotation = camera.quaternion.clone();
+  const target = new Vector3(-3, 1, -7);
+  const focus = focusView(target, previousPosition, 2);
+  const twoFingerTurn = focusView(target, previousPosition, 2);
+  positionFocusCamera(focus, camera, -6);
+  const framedPosition = camera.position.clone();
+  assert.ok(Math.abs(camera.position.distanceTo(target) - 6.8) < 1e-9);
+  assert.ok(camera.position.distanceTo(target) < previousPosition.distanceTo(target));
+  for (let frame = 0; frame < 30; frame++) {
+    moveFocus(focus, "pan_right", 1 / 60);
+    moveFocus(twoFingerTurn, "rotate_right", 1 / 60);
+  }
+  assert.deepEqual(focus, twoFingerTurn);
+  positionFocusCamera(focus, camera, -6);
+  assert.ok(camera.position.distanceTo(framedPosition) > 1);
+  const height = camera.position.y;
+  moveFocus(focus, "pan_up", 0.05);
+  moveFocus(focus, "zoom_in", 0.05);
+  positionFocusCamera(focus, camera, -6);
+  assert.ok(camera.position.y > height);
+  assert.ok(Math.abs(camera.position.distanceTo(target) - 5.9) < 1e-9);
+  assert.ok(camera.getWorldDirection(new Vector3()).distanceTo(target.clone().sub(camera.position).normalize()) < 1e-9);
+  assert.deepEqual(focus.target, target);
+  positionCamera(overview, camera);
+  assert.deepEqual(camera.position, previousPosition);
+  assert.deepEqual(camera.quaternion.toArray(), previousRotation.toArray());
 });
 
 test("raycasting uses the real mesh silhouette and nearest surface, including the opening in the ring", () => {

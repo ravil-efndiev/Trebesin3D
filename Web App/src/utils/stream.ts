@@ -2,7 +2,7 @@ import { config } from "./config.ts";
 import { createFramePacket, parseServerMessage } from "./protocol.ts";
 import type { StreamOptions, StreamSocket } from "./types.ts";
 
-export const createFrameStream = ({ url, capture, scheduleFrame, onStatus, onTracking, checkHealth, createSocket = (address) => new WebSocket(address) }: StreamOptions) => {
+export const createFrameStream = ({ url, capture, scheduleFrame, onStatus, onTracking, onSelectReceipt, checkHealth, createSocket = (address) => new WebSocket(address) }: StreamOptions) => {
   let stopped = false;
   let socket: StreamSocket | null = null;
   let consecutiveRejections = 0;
@@ -191,7 +191,10 @@ export const createFrameStream = ({ url, capture, scheduleFrame, onStatus, onTra
           onStatus({ phase: "streaming", message: "Sending camera frames to the CV service." });
           scheduleCapture();
         } else if (message.type === "tracking:result") {
-          if (message.streamId !== streamId || message.frameId !== pendingFrameId) return;
+          if (message.streamId !== streamId || message.frameId !== pendingFrameId) {
+            if (message.gesture === "select") onSelectReceipt?.({ frameId: message.frameId, status: "unmatched" });
+            return;
+          }
 
           clearTimeout(deadline);
           pendingFrameId = null;
@@ -199,6 +202,9 @@ export const createFrameStream = ({ url, capture, scheduleFrame, onStatus, onTra
           retries = 0;
 
           const remainingMs = lastTimestamp + config.trackingMaxAgeMs - performance.now();
+          if (message.gesture === "select") {
+            onSelectReceipt?.({ frameId: message.frameId, status: remainingMs <= 0 ? "expired" : "fresh" });
+          }
           if (remainingMs <= 0) {
             clearTracking();
           } else {

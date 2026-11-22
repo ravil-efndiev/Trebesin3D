@@ -8,7 +8,7 @@ import { validateStreamUrl } from "../utils/protocol.ts";
 import { createFrameStream } from "../utils/stream.ts";
 import type { StreamOptions, StreamStatus } from "../utils/types.ts";
 
-export const useCameraStream = (url: string, onTracking?: StreamOptions["onTracking"]) => {
+export const useCameraStream = (url: string, onTracking?: StreamOptions["onTracking"], onSelectReceipt?: StreamOptions["onSelectReceipt"]) => {
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const webcamRef = useRef<Webcam>(null);
   const mediaRef = useRef<MediaStream | null>(null);
@@ -120,6 +120,7 @@ export const useCameraStream = (url: string, onTracking?: StreamOptions["onTrack
       capture: createFrameCapture(getVideo),
       scheduleFrame: createFrameScheduler(getVideo),
       onStatus: reportStatus,
+      onSelectReceipt,
       onTracking: (sample) => {
         drawHandOverlay(overlayRef.current, sample);
         onTracking?.(sample);
@@ -138,7 +139,7 @@ export const useCameraStream = (url: string, onTracking?: StreamOptions["onTrack
       client.stop();
       if (clientRef.current === client) clientRef.current = null;
     };
-  }, [enabled, cameraReady, visible, url, reportStatus, onTracking]);
+  }, [enabled, cameraReady, visible, url, reportStatus, onTracking, onSelectReceipt]);
 
   useEffect(() => () => {
     requestedRef.current = false;

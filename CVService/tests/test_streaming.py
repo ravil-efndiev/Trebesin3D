@@ -7,6 +7,7 @@ import unittest
 from contextlib import ExitStack
 from io import BytesIO
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
@@ -19,6 +20,8 @@ from websockets.sync.client import connect
 
 from src.api.v1.protocol import MAX_PACKET_BYTES
 from src.main import create_app
+from src.tracking import HandTracker
+from tests.test_gestures import BENT_INDEX, PARTIAL_INDEX, hand_joints
 
 
 ORIGIN = "http://127.0.0.1:5173"
@@ -280,6 +283,40 @@ class StreamingTests(unittest.TestCase):
                                  ("tracking:result", stream, frame_id))
                 self.assertEqual(response["gesture"], expected)
                 self.assertEqual(len(response["hands"]), int(expected == "cursor"))
+
+    def test_v3_transmits_select_after_a_sampled_bend(self):
+        fixture = Path(__file__).resolve().parents[2] / "tests/fixtures/pointing_up.jpg"
+        infer = HandTracker._infer
+        pointing = None
+        steps = iter((None, PARTIAL_INDEX, PARTIAL_INDEX, BENT_INDEX, BENT_INDEX))
+
+        def infer_sequence(tracker, image):
+            nonlocal pointing
+            offsets = next(steps)
+            if offsets is None:
+                pointing = infer(tracker, image)
+                return pointing
+            side = pointing.handedness[0][0].category_name
+            joints = hand_joints([], side=side, index_offsets=offsets)
+            return SimpleNamespace(
+                handedness=pointing.handedness, hand_landmarks=pointing.hand_landmarks,
+                hand_world_landmarks=[[SimpleNamespace(x=x, y=y, z=z) for x, y, z in joints]],
+            )
+
+        with Image.open(fixture) as hand, Image.new("RGB", (640, 480)) as scene, BytesIO() as buffer:
+            scene.paste(hand, (30, 40))
+            scene.save(buffer, format="JPEG")
+            jpeg = buffer.getvalue()
+
+        with patch.object(HandTracker, "_infer", infer_sequence), self.websocket() as websocket:
+            stream = self.start_stream(websocket, 3)
+            for frame_id, expected in enumerate(("cursor", "idle", "idle", "select", "idle"), start=1):
+                time.sleep(0.07)
+                websocket.send(packet(stream, frame_id, jpeg, width=640, height=480, protocolVersion=3))
+                response = json.loads(websocket.recv(timeout=2))
+                self.assertEqual(response["type"], "tracking:result", response)
+                self.assertEqual((response["streamId"], response["frameId"], response["gesture"]),
+                                 (stream, frame_id, expected))
 
     def test_v2_trackers_are_isolated_and_closed_on_stop_and_disconnect(self):
         with patch("src.api.v1.websocket.HandTracker") as factory:

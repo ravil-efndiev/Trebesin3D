@@ -29,5 +29,6 @@ export const galleryLayout = (width: number, height: number) => {
   const phase = portrait ? place(0.20, 0.30, -7, 0.27, 0.18, 3.4) : place(0.105 * space, 0.35, -7, 0.17 * space, 0.23, 3.4);
   const house = portrait ? place(0.79, 0.78, -23, 0.30, 0.22, 4.1) : place(0.90 * space, 0.51, -23, 0.155 * space, 0.25, 4.1);
   const floor = Math.min(helix.y - 1.2 * helix.scale, house.y - 1.25 * house.scale, phase.y - 1.7 * phase.scale, -3.5) - 2.2;
-  return { helix, phase, house, floor };
+  const pivot = { x: (helix.x + phase.x + house.x) / 3, z: (helix.z + phase.z + house.z) / 3 };
+  return { helix, phase, house, floor, pivot };
 };

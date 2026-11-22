@@ -28,9 +28,18 @@ export const checkScene = async (tip: number[], showHand: (visible: boolean) => 
     await until(() => !project(), "Empty results did not clear hand hover");
     showHand(true);
     await until(() => project() === "Helix Pavilion", "Hover did not recover");
+    const pointingY = tip[1];
+    pose("idle");
+    tip[1] = 0.98;
+    await until(() => !project(), "Intermediate bend did not stop pointer hover");
     pose("select");
     await until(pinned, "Index bend did not select the pavilion");
+    if (new URLSearchParams(location.search).get("debug") === "select") {
+      const debug = () => document.querySelector('[aria-label="Select debug"]')?.textContent ?? "";
+      await until(() => debug().includes("Received from CVService: 1") && debug().includes("Picked Helix Pavilion"), "Select debug did not record receipt and pick");
+    }
     showHand(false);
+    tip[1] = pointingY;
     await until(() => cameraButton()?.parentElement?.textContent?.includes("0 hands") === true, "Missing empty-hand result");
     if (!pinned() || project() !== "Helix Pavilion") throw new Error("Selection disappeared after release");
     document.querySelector<HTMLButtonElement>('[aria-label="Clear project selection"]')!.click();

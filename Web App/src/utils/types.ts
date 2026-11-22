@@ -61,12 +61,18 @@ export interface StreamSocket {
 
 export type ScheduleFrame = (notBeforeMs: number, onFrame: (mediaTime?: number) => void) => (() => void) | undefined;
 
+export interface SelectReceipt {
+  frameId: number;
+  status: "fresh" | "expired" | "unmatched";
+}
+
 export interface StreamOptions {
   url: string;
   capture: (signal: AbortSignal, mediaTime?: number) => Promise<CapturedFrame | null>;
   scheduleFrame?: ScheduleFrame;
   onStatus: (status: StreamStatus) => void;
   onTracking?: (sample: TrackingSample | null) => void;
+  onSelectReceipt?: (receipt: SelectReceipt) => void;
   createSocket?: (url: string) => StreamSocket;
   checkHealth?: (signal: AbortSignal) => Promise<void>;
 }
