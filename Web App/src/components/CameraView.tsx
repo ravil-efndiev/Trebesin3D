@@ -3,6 +3,9 @@ import Webcam from "react-webcam";
 import { useCameraStream } from "../hooks/useCameraStream.ts";
 import { config } from "../utils/config.ts";
 import type { StreamOptions } from "../utils/types.ts";
+import { useRef, useState } from "react";
+import useClickAwayListener from "../hooks/useClickAwayListener.ts";
+import { validateStreamUrl } from "../utils/protocol.ts";
 
 const socketProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
 const streamUrl = import.meta.env.VITE_CV_STREAM_URL || `${socketProtocol}//${window.location.host}${config.streamPath}`;
@@ -19,6 +22,22 @@ interface Props {
 const CameraView = ({ onTracking, onSelectReceipt }: Props) => {
   const { webcamRef, overlayRef, enabled, status, gestureText, start, stop, onUserMedia, onUserMediaError } = useCameraStream(streamUrl, onTracking, onSelectReceipt);
   const streaming = status.phase === "streaming";
+
+  const [showUrl, setShowUrl] = useState(false);
+  const showUrlButtonRef = useRef<HTMLButtonElement>(null);
+
+  useClickAwayListener(showUrlButtonRef, () => {
+    setShowUrl(false);
+  });
+
+  const validateAndShowStreamUrl = (urlString: string) => {
+    try {
+      const url = validateStreamUrl(new URL(urlString), window.location.protocol);
+      return url;
+    } catch (error) {
+      return "The camera stream URL is invalid or insecure.";
+    }
+  }
 
   return (
     <section className="overflow-hidden rounded-[4px] border border-edge bg-panel shadow-lg" aria-label="Camera streaming">
@@ -45,7 +64,18 @@ const CameraView = ({ onTracking, onSelectReceipt }: Props) => {
       ) : (
         <div className="flex items-center gap-2.5 bg-[#0b1421] px-3 py-3.5 text-muted">
           <CameraOff size={ 20 } strokeWidth={ 1.4 } aria-hidden="true" className="shrink-0 text-[#839caf]" />
-          <p className="text-xs leading-relaxed" title={ streamUrl }>Starting sends camera frames to CVService. Audio is off.</p>
+          <p className="text-xs leading-relaxed">
+            Starting sends camera frames to CVService. Audio is off.<br />
+            <button
+             type="button"
+              aria-expanded={ showUrl }
+              className="text-left text-xs break-all text-muted underline hover:text-white"
+              onClick={ () => setShowUrl((prev) => !prev) }
+              ref={ showUrlButtonRef }
+            >
+              { showUrl ? validateAndShowStreamUrl(streamUrl) : "Show URL" }
+            </button>
+          </p>
         </div>
       ) }
       <div className="space-y-2.5 border-t border-edge px-3 py-3">

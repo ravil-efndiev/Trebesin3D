@@ -4,7 +4,7 @@ import apiClient, { checkServiceHealth, getApiBaseUrl } from "../src/utils/api.t
 
 test("API base ends in /api and health follows the WebSocket origin with the exact trailing-slash route", async (t) => {
   assert.equal(apiClient.defaults.baseURL, "/api");
-  assert.equal(getApiBaseUrl("wss://cv.example:9443/api/v1/stream?token=discard"), "https://cv.example:9443/api");
+  assert.equal(getApiBaseUrl("wss://cv.example:9443/api/v1/stream"), "https://cv.example:9443/api");
   const previous = apiClient.defaults.adapter;
   t.after(() => { apiClient.defaults.adapter = previous; });
   apiClient.defaults.adapter = async (request) => {

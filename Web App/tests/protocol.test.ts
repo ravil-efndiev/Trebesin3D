@@ -56,11 +56,11 @@ test("server messages reject unknown types, extra fields, malformed IDs, binary,
 });
 
 test("service URLs reject mixed content, embedded credentials, fragments, and non-WebSocket schemes", () => {
-  assert.equal(validateStreamUrl("ws://localhost:9000/api/v1/stream", "http:"), "ws://localhost:9000/api/v1/stream");
-  assert.equal(validateStreamUrl("wss://cv.example/api/v1/stream", "https:"), "wss://cv.example/api/v1/stream");
+  assert.equal(validateStreamUrl(new URL("ws://localhost:9000/api/v1/stream"), "http:"), "ws://localhost:9000/api/v1/stream");
+  assert.equal(validateStreamUrl(new URL("wss://cv.example/api/v1/stream"), "https:"), "wss://cv.example/api/v1/stream");
 
   for (const url of ["ws://localhost:8000", "https://cv.example", "wss://user:secret@cv.example", "wss://cv.example/#x"]) {
-    assert.throws(() => validateStreamUrl(url, "https:"));
+    assert.throws(() => validateStreamUrl(new URL(url), "https:"));
   }
 });
 

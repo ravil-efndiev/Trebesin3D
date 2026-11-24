@@ -8,9 +8,11 @@ const apiClient = axios.create({
   headers: { Accept: "application/json" },
 });
 
-export const getApiBaseUrl = (streamUrl: string): string => {
-  const url = new URL(validateStreamUrl(streamUrl, "http:"));
-  url.protocol = url.protocol === "wss:" ? "https:" : "http:";
+export const getApiBaseUrl = (streamUrlStr: string): string => {
+  const streamUrl = new URL(streamUrlStr);
+  const pageProtocol = streamUrl.protocol === "wss:" ? "https:" : "http:";
+  const url = new URL(validateStreamUrl(streamUrl, pageProtocol));
+  url.protocol = pageProtocol;
   url.pathname = "/api";
   url.search = "";
 

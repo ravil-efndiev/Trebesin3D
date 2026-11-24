@@ -11,7 +11,8 @@ const until = async (condition: () => boolean, description: string) => {
 
 export const checkScene = async (tip: number[], showHand: (visible: boolean) => void, pose: (gesture: Gesture) => void, tracks: MediaStreamTrack[]) => {
   const report = document.querySelector<HTMLOutputElement>("#scene-check")!;
-  const cameraButton = () => document.querySelector<HTMLButtonElement>('[aria-label="Camera streaming"] button');
+  const cameraButton = () => Array.from(document.querySelectorAll<HTMLButtonElement>('[aria-label="Camera streaming"] button'))
+    .find((button) => /^(Start|Stop) camera$/.test(button.textContent.trim()));
   const project = () => document.querySelector("#project-name")?.textContent;
   const pinned = () => Boolean(document.querySelector('[aria-label="Clear project selection"]'));
   try {

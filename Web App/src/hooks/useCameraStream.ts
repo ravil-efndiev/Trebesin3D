@@ -82,7 +82,7 @@ export const useCameraStream = (url: string, onTracking?: StreamOptions["onTrack
     if (requestedRef.current) return;
 
     try {
-      validateStreamUrl(url, window.location.protocol);
+      validateStreamUrl(new URL(url), window.location.protocol);
       requestedRef.current = true;
       cameraSessionRef.current += 1;
       setCameraSession(cameraSessionRef.current);
@@ -116,7 +116,7 @@ export const useCameraStream = (url: string, onTracking?: StreamOptions["onTrack
     let lastCount = 0;
     const getVideo = () => webcamRef.current?.video ?? null;
     const client = createFrameStream({
-      url: validateStreamUrl(url, window.location.protocol),
+      url: validateStreamUrl(new URL(url), window.location.protocol),
       capture: createFrameCapture(getVideo),
       scheduleFrame: createFrameScheduler(getVideo),
       onStatus: reportStatus,

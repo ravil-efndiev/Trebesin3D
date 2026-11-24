@@ -50,7 +50,7 @@ const App = () => {
       <Suspense fallback={ null }>
         <PortfolioScene input={ input } active={ active } selected={ selected } onHover={ setHovered } onSelect={ setSelected } onFocus={ setFocused } />
       </Suspense>
-      <aside aria-label="Camera and project details" onClick={ selected ? clear : undefined } className="absolute top-3 right-3 z-10 grid max-h-[calc(100%-1.5rem)] w-[clamp(9.5rem,41vw,14rem)] gap-2 overflow-y-auto overscroll-contain sm:top-6 sm:right-6 sm:max-h-[calc(100%-3rem)] sm:w-[clamp(12rem,19vw,16rem)]">
+      <aside aria-label="Camera and project details" className="absolute top-3 right-3 z-10 grid max-h-[calc(100%-1.5rem)] w-[clamp(9.5rem,41vw,14rem)] gap-2 overflow-y-auto overscroll-contain sm:top-6 sm:right-6 sm:max-h-[calc(100%-3rem)] sm:w-[clamp(12rem,19vw,16rem)]">
         <CameraView onTracking={ input.observe } onSelectReceipt={ selectDebug ? reportReceipt : undefined } />
         { selectDebug && (
           <section aria-label="Select debug" className="rounded-[4px] border border-edge bg-panel px-3 py-2.5 text-xs text-muted">

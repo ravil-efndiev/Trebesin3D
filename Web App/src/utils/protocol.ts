@@ -17,15 +17,24 @@ const isHand = (value: unknown): boolean => {
   );
 };
 
-export const validateStreamUrl = (value: string, pageProtocol: string): string => {
-  const url = new URL(value);
+const loopbackUrls = new Set([
+  "localhost", "127.0.0.1", "[::1]"
+]);
 
-  if (
-    !["ws:", "wss:"].includes(url.protocol)
-    || url.username || url.password || url.hash
-    || (pageProtocol === "https:" && url.protocol !== "wss:")
-  ) {
-    throw new Error("Use a ws:// URL locally or wss:// on HTTPS, without credentials or fragments.");
+export const validateStreamUrl = (url: URL, pageProtocol: string): string => {
+  const isLoopback = loopbackUrls.has(url.hostname);
+
+  if (!["ws:", "wss:"].includes(url.protocol)) {
+    throw new Error("Unknown streaming url protocol provided");
+  }
+  if (pageProtocol === "https:" && url.protocol !== "wss:") {
+    throw new Error("wss: in streaming url can only be used with https:");
+  }
+  if (!isLoopback && (pageProtocol === "http:" || url.protocol === "ws:")) {
+    throw new Error("Non secure protocols for page and streaming (http:, ws:) are only allowed from loopback urls");
+  }
+  if (url.search || url.hash || url.username || url.password) {
+    throw new Error("Unsupported url parameters");
   }
 
   return url.href;

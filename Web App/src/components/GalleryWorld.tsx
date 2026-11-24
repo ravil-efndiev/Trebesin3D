@@ -3,9 +3,10 @@ import type { RefObject } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { DataTexture, Group, LinearFilter, Mesh, Quaternion, RGBAFormat, Vector2, Vector3 } from "three";
 import { galleryGeometry, projectGeometry } from "../scene/geometry.ts";
-import { createPicker, focusView, homeView, moveFocus, moveView, positionCamera, positionFocusCamera, travel, turnFocus, turnView, zoomFocus } from "../scene/interaction.ts";
+import { createPicker, focusView, homeView, moveFocus, moveView, positionCamera, positionFocusCamera, travel } from "../scene/interaction.ts";
 import type { SceneInput } from "../scene/handInput.ts";
 import { galleryLayout, projects, type ProjectId } from "../scene/projects.ts";
+import useGalleryControls, { type GalleryDrag, type GalleryFocus } from "./useGalleryControls.ts";
 
 interface Props {
   input: SceneInput;
@@ -43,12 +44,12 @@ const GalleryWorld = ({ input, active, selected, rotations, cursor, onHover, onS
   const pick = useMemo(createPicker, []);
   const pointer = useMemo(() => new Vector2(), []);
   const pointerInside = useRef(false);
-  const drag = useRef<{ id: ProjectId | null; x: number; y: number; startX: number; startY: number; moved: boolean; pointerId: number } | null>(null);
+  const drag = useRef<GalleryDrag | null>(null);
   const time = useRef(0);
   const reducedMotion = useMemo(() => window.matchMedia("(prefers-reduced-motion: reduce)"), []);
   const layout = useMemo(() => galleryLayout(size.width, size.height), [size.width, size.height]);
   const [view] = useState(() => homeView(layout.pivot));
-  const focus = useRef<{ id: ProjectId; view: ReturnType<typeof focusView> } | null>(null);
+  const focus = useRef<GalleryFocus | null>(null);
   const transition = useMemo(() => ({ elapsed: Infinity, from: new Vector3(), rotation: new Quaternion(), goal: camera.clone() }), [camera]);
   const initialPivot = useRef(layout.pivot);
   const assets = useMemo(() => ({
@@ -79,120 +80,26 @@ const GalleryWorld = ({ input, active, selected, rotations, cursor, onHover, onS
     positionCamera(view, camera);
   }, [camera, view, layout.floor, layout.pivot, transition]);
 
-  useEffect(() => {
-    const canvas = gl.domElement;
-    const toPointer = (event: PointerEvent) => {
-      const bounds = canvas.getBoundingClientRect();
-      pointer.set(2 * (event.clientX - bounds.left) / bounds.width - 1, 1 - 2 * (event.clientY - bounds.top) / bounds.height);
-    };
-    const release = () => {
-      const held = drag.current;
-      drag.current = null;
-      if (held && canvas.hasPointerCapture(held.pointerId)) canvas.releasePointerCapture(held.pointerId);
-    };
-    const move = (event: PointerEvent) => {
-      if (!event.isPrimary) return;
-      toPointer(event);
-      pointerInside.current = true;
-      const held = drag.current;
-      if (!held || held.pointerId !== event.pointerId) return;
-      if (!held.moved && Math.hypot(event.clientX - held.startX, event.clientY - held.startY) < 4) return;
-      held.moved = true;
-      const dx = event.clientX - held.x;
-      const dy = event.clientY - held.y;
-      if (focus.current) turnFocus(focus.current.view, dx * 0.005, dy * 0.005);
-      else if (held.id) rotations.current[held.id] += dx * 0.013;
-      else if (transition.elapsed >= focusTransitionSeconds) turnView(view, dx * 0.005);
-      held.x = event.clientX;
-      held.y = event.clientY;
-    };
-    const down = (event: PointerEvent) => {
-      if (!event.isPrimary || event.button !== 0) return;
-      toPointer(event);
-      const id = pick(pointer, camera, targets.current);
-      canvas.focus({ preventScroll: true });
-      drag.current = { id, x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, moved: false, pointerId: event.pointerId };
-      canvas.setPointerCapture(event.pointerId);
-    };
-    const leave = () => { pointerInside.current = false; };
-    const up = (event: PointerEvent) => {
-      if (!event.isPrimary) return;
-      const held = drag.current;
-      if (held?.pointerId === event.pointerId && !held.moved) {
-        onSelect(focus.current && held.id !== focus.current.id ? null : held.id);
-      }
-      release();
-      if (event.pointerType === "touch") leave();
-    };
-    const reset = () => { release(); leave(); };
-    const lost = (event: Event) => { event.preventDefault(); onUnavailable(); };
-
-    const wheel = (event: WheelEvent) => {
-      event.preventDefault();
-      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? size.height : 1;
-      const step = -Math.max(-200, Math.min(200, event.deltaY * unit)) * 0.032;
-      if (focus.current) zoomFocus(focus.current.view, step);
-      else if (transition.elapsed >= focusTransitionSeconds) travel(view, step, 0, 0, layout.floor);
-    };
-    const key = (event: KeyboardEvent) => {
-      if (event.altKey || event.metaKey || event.ctrlKey) return;
-      const focused = focus.current?.view;
-      if (focused) {
-        switch (event.key.toLowerCase()) {
-          case "w": zoomFocus(focused, 1); break;
-          case "s": zoomFocus(focused, -1); break;
-          case "a": case "arrowleft": turnFocus(focused, -0.14); break;
-          case "d": case "arrowright": turnFocus(focused, 0.14); break;
-          case "arrowup": turnFocus(focused, 0, 0.14); break;
-          case "arrowdown": turnFocus(focused, 0, -0.14); break;
-          case "home": onSelect(null); break;
-          default: return;
-        }
-        event.preventDefault();
-        return;
-      }
-      if (transition.elapsed < focusTransitionSeconds) return;
-      switch (event.key.toLowerCase()) {
-        case "w": travel(view, 1, 0, 0, layout.floor); break;
-        case "s": travel(view, -1, 0, 0, layout.floor); break;
-        case "a": travel(view, 0, -1, 0, layout.floor); break;
-        case "d": travel(view, 0, 1, 0, layout.floor); break;
-        case "arrowleft": turnView(view, -0.14); break;
-        case "arrowright": turnView(view, 0.14); break;
-        case "home":
-          Object.assign(view, homeView(layout.pivot));
-          initialPivot.current = layout.pivot;
-          break;
-        default: return;
-      }
-      event.preventDefault();
-    };
-    canvas.tabIndex = 0;
-    canvas.setAttribute("aria-label", "Explore the gallery. Drag empty space or use the left and right arrows to orbit. Scroll or use W A S D to move. Home resets the view.");
-    canvas.addEventListener("wheel", wheel, { passive: false });
-    canvas.addEventListener("keydown", key);
-    canvas.addEventListener("pointermove", move);
-    canvas.addEventListener("pointerdown", down);
-    canvas.addEventListener("pointerup", up);
-    canvas.addEventListener("pointerleave", leave);
-    canvas.addEventListener("pointercancel", reset);
-    canvas.addEventListener("lostpointercapture", release);
-    canvas.addEventListener("webglcontextlost", lost);
-    window.addEventListener("blur", reset);
-    return () => {
-      reset();
-      canvas.removeEventListener("wheel", wheel);
-      canvas.removeEventListener("keydown", key);
-      canvas.removeEventListener("pointermove", move);
-      canvas.removeEventListener("pointerdown", down);
-      canvas.removeEventListener("pointerup", up);
-      canvas.removeEventListener("pointerleave", leave);
-      canvas.removeEventListener("pointercancel", reset);
-      canvas.removeEventListener("lostpointercapture", release);
-      canvas.removeEventListener("webglcontextlost", lost);
-      window.removeEventListener("blur", reset);
-    };
-  }, [camera, gl, onSelect, onUnavailable, pick, pointer, rotations, view, layout.floor, layout.pivot, size.height, transition]);
+  useGalleryControls({
+    canvas: gl.domElement,
+    camera,
+    view,
+    floor: layout.floor,
+    pivot: layout.pivot,
+    viewportHeight: size.height,
+    transition,
+    focusTransitionSeconds,
+    initialPivot,
+    targets,
+    pointer,
+    pointerInside,
+    drag,
+    focus,
+    rotations,
+    pick,
+    onSelect,
+    onUnavailable,
+  });
 
   useFrame((_, delta) => {
     const step = Math.min(delta, 0.05);
