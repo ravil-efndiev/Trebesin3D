@@ -5,7 +5,7 @@ import { fitModel } from "../src/scene/fitModel.ts";
 import { test } from "node:test";
 import { Box3, Group, BoxGeometry, RingGeometry, Texture, Mesh, MeshBasicMaterial, PerspectiveCamera, Vector2, Vector3 } from "three";
 import { createPicker, focusView, homeView, moveFocus, moveView, positionCamera, positionFocusCamera, turnView } from "../src/scene/interaction.ts";
-import { fieldOfView, galleryLayout, hall, homeDepth, projects } from "../src/scene/projects.ts";
+import { exhibitRotation, fieldOfView, galleryLayout, hall, homeDepth, projects } from "../src/scene/projects.ts";
 import { createSceneInput } from "../src/scene/handInput.ts";
 import type { Gesture } from "../src/utils/gestures.ts";
 import type { TrackingSample } from "../src/utils/types.ts";
@@ -202,7 +202,7 @@ test("raycasting uses the real mesh silhouette and nearest surface, including th
   material.dispose();
 });
 
-test("all three exhibits fit the home view with separate screen bounds on wide and narrow displays", async () => {
+test("all exhibits fit the home view with separate screen bounds on wide and narrow displays", async () => {
   // The layout test needs the real meshes. Firefox covers texture decoding.
   const loader = new GLTFLoader().register(() => ({ name: "layout-test", loadTexture: async () => new Texture() }));
   const models = await Promise.all(projects.map(async (project) => {
@@ -223,13 +223,17 @@ test("all three exhibits fit the home view with separate screen bounds on wide a
     camera.position.z = homeDepth;
     camera.updateMatrixWorld();
     assert.ok(layout.slotMachine.z - layout.albiLab.z >= 12 && layout.albiLab.z - layout.omnicar.z >= 14);
-    const boxes = models.map((mesh, i) => {
+    assert.ok(layout.escapeFromIsland.z < layout.omnicar.z && layout.escapeFromIsland.x < 0);
+    models.forEach((mesh, i) => {
       const id = projects[i].id;
       const pose = layout[id];
       mesh.position.set(pose.x, pose.y, pose.z);
       mesh.scale.setScalar(pose.scale);
-      mesh.rotation.set(id === "albiLab" ? 0.08 : 0.19, id === "slotMachine" ? -1.4 : -0.48, 0);
+      mesh.rotation.set(exhibitRotation[id].pitch, exhibitRotation[id].yaw, 0);
       mesh.updateMatrixWorld();
+    });
+    const boxes = models.map((mesh, i) => {
+      const { id } = projects[i];
       const screen = new Box3();
       const point = new Vector3();
       mesh.traverse((child) => {
@@ -244,13 +248,20 @@ test("all three exhibits fit the home view with separate screen bounds on wide a
       const center = screen.getCenter(new Vector3());
       // The cabinet sits left of the loose coins in the front view.
       if (id === "slotMachine") center.x -= 0.25 * (screen.max.x - screen.min.x);
-      assert.equal(createPicker()(center, camera, models), id);
+      // The wreck's fuselage is offset from the center of its projected bounds.
+      if (id === "escapeFromIsland") {
+        center.x -= 0.2 * (screen.max.x - screen.min.x);
+        center.y -= 0.2 * (screen.max.y - screen.min.y);
+      }
+      assert.equal(createPicker()(center, camera, models), id, `${id} at ${width}×${height}`);
       assert.ok(screen.min.x > -1 && screen.max.x < 1 && screen.min.y > -1 && screen.max.y < 1, id);
       screen.min.z = screen.max.z = 0;
       return screen;
     });
     for (let i = 0; i < boxes.length; i++) {
-      for (const other of boxes.slice(i + 1)) assert.equal(boxes[i].intersectsBox(other), false);
+      for (let j = i + 1; j < boxes.length; j++) {
+        assert.equal(boxes[i].intersectsBox(boxes[j]), false, `${projects[i].id} overlaps ${projects[j].id} at ${width}×${height}`);
+      }
     }
   }
   models.forEach((model) => model.traverse((child) => { if (child instanceof Mesh) child.geometry.dispose(); }));

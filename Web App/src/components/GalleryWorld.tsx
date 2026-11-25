@@ -5,7 +5,7 @@ import { DataTexture, Group, LinearFilter, Quaternion, RGBAFormat, Vector2, Vect
 import { galleryGeometry } from "../scene/geometry.ts";
 import { createPicker, focusView, homeView, moveFocus, moveView, positionCamera, positionFocusCamera, travel } from "../scene/interaction.ts";
 import type { SceneInput } from "../scene/handInput.ts";
-import { galleryLayout, projects, type ProjectId } from "../scene/projects.ts";
+import { exhibitRotation, galleryLayout, projects, type ProjectId } from "../scene/projects.ts";
 import ProjectModel from "./ProjectModel.tsx";
 import useGalleryControls, { type GalleryDrag, type GalleryFocus } from "./useGalleryControls.ts";
 
@@ -183,7 +183,7 @@ const GalleryWorld = ({ input, active, selected, rotations, cursor, onHover, onS
         { projects.map(({ id, model }) => (
           <group key={ id } userData={ { projectId: id, focusRadius: model.span / 2 } }
             position={ [layout[id].x, layout[id].y, layout[id].z] } scale={ layout[id].scale }
-            rotation={ [id === "albiLab" ? 0.08 : 0.19, rotations.current[id], 0] }>
+            rotation={ [exhibitRotation[id].pitch, rotations.current[id], 0] }>
             <Suspense fallback={ null }><ProjectModel { ...model } /></Suspense>
           </group>
         )) }

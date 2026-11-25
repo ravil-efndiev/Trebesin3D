@@ -1,6 +1,6 @@
 import { Component, useCallback, useRef, useState, type ReactNode } from "react";
 import { Canvas } from "@react-three/fiber";
-import { fieldOfView, homeDepth, projects, type ProjectId } from "../scene/projects.ts";
+import { exhibitRotation, fieldOfView, homeDepth, projects, type ProjectId } from "../scene/projects.ts";
 import type { SceneInput } from "../scene/handInput.ts";
 import GalleryWorld from "./GalleryWorld.tsx";
 
@@ -23,7 +23,12 @@ class RendererBoundary extends Component<{ children: ReactNode; onUnavailable: (
 
 const PortfolioScene = ({ input, active, selected, onHover, onSelect, onFocus }: Props) => {
   const cursor = useRef<HTMLSpanElement>(null);
-  const rotations = useRef({ slotMachine: -1.4, albiLab: -0.32, omnicar: -0.52 });
+  const rotations = useRef({
+    slotMachine: exhibitRotation.slotMachine.yaw,
+    albiLab: exhibitRotation.albiLab.yaw,
+    omnicar: exhibitRotation.omnicar.yaw,
+    escapeFromIsland: exhibitRotation.escapeFromIsland.yaw,
+  });
   const [available, setAvailable] = useState(true);
   const unavailable = useCallback(() => {
     setAvailable(false);
