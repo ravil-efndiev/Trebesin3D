@@ -1,4 +1,6 @@
 // Runs only in the synthetic camera fixture. No camera permission or service is required.
+import { _roots } from "@react-three/fiber";
+import { galleryLayout } from "../src/scene/projects.ts";
 import type { Gesture } from "../src/utils/gestures.ts";
 
 const until = async (condition: () => boolean, description: string) => {
@@ -51,9 +53,14 @@ export const checkScene = async (tip: number[], showHand: (visible: boolean) => 
     showHand(true);
     for (const gesture of ["zoom_in", "rotate_right"] as const) {
       await until(() => project() === "Helix Pavilion", "Home view did not restore the same hand target");
+      const camera = _roots.get(canvas)!.store.getState().camera;
+      const start = camera.position.clone();
+      const { pivot } = galleryLayout(canvas.clientWidth, canvas.clientHeight);
+      const radius = () => Math.hypot(camera.position.x - pivot.x, camera.position.z - pivot.z);
+      const entranceRadius = radius();
       pose(gesture);
       const zoom = gesture === "zoom_in";
-      await until(() => cameraStatus().includes(zoom ? "2 hands · Camera · Zooming in" : "Rotating right"), "Navigation gesture did not reach the camera panel");
+      await until(() => cameraStatus().includes(zoom ? "2 hands · Camera · Zooming in" : "2 hands · Camera · Rotating right"), "Navigation gesture did not reach the camera panel");
       if (zoom) {
         const overlay = document.querySelector<HTMLCanvasElement>('[aria-label="Camera streaming"] canvas')!;
         const context = overlay.getContext("2d")!;
@@ -61,8 +68,13 @@ export const checkScene = async (tip: number[], showHand: (visible: boolean) => 
         if (wristColor(0.5) !== "35,121,255" || wristColor(0.21) !== "186,54,230") throw new Error("Missing two-color overlay");
       }
       await new Promise((resolve) => setTimeout(resolve, zoom ? 1450 : 700));
+      if (!zoom) {
+        if (start.distanceTo(camera.position) < 2 || Math.abs(radius() - entranceRadius) > 0.01) {
+          throw new Error("Overview turn did not move the camera around the entrance pivot");
+        }
+      }
       pose("cursor");
-      await until(() => cameraStatus().includes("1 hand · Cursor"), "Did not return to cursor mode");
+      await until(() => cameraStatus().includes("2 hands · Cursor"), "Did not return to cursor mode");
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       if (project() === "Helix Pavilion") throw new Error(gesture + " left the original target under the cursor");
       canvas.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true }));

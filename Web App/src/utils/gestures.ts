@@ -19,5 +19,8 @@ export type Gesture = keyof typeof gestureLabels;
 
 export const isGesture = (value: unknown, handCount: number): value is Gesture => {
   if (typeof value !== "string" || !Object.hasOwn(gestureLabels, value)) return false;
-  return value === "idle" || handCount === (value.startsWith("zoom_") ? 2 : 1);
+  if (value === "idle") return true;
+  if (value.startsWith("zoom_")) return handCount === 2;
+  if (value.startsWith("pan_")) return handCount === 1;
+  return handCount === 1 || handCount === 2;
 };

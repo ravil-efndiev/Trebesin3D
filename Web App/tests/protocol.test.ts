@@ -84,8 +84,12 @@ test("v3 gestures must match the reported hand count and belong to the documente
     const result = { ...message, gesture };
     assert.deepEqual(parseServerMessage(JSON.stringify(result)), result);
   }
+  for (const gesture of ["cursor", "select", "rotate_ready", "rotate_left", "rotate_right", "zoom_in"]) {
+    const result = { ...message, hands: [hand, hand], gesture };
+    assert.deepEqual(parseServerMessage(JSON.stringify(result)), result);
+  }
   for (const result of [message, { ...message, gesture: "wave" }, { ...message, gesture: "zoom_in" },
-    { ...message, hands: [], gesture: "select" }, { ...message, hands: [hand, hand], gesture: "cursor" }]) {
+    { ...message, hands: [], gesture: "select" }, { ...message, hands: [hand, hand], gesture: "pan_left" }]) {
     assert.throws(() => parseServerMessage(JSON.stringify(result)));
   }
 });

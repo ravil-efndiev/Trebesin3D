@@ -7,6 +7,7 @@ MAX_SAMPLE_GAP_MS = 200
 BEND_WINDOW_MS = 280
 BEND_START_DEGREES = 12
 BEND_TRIGGER_DEGREES = 25
+INDEX_ONLY = (False, True, False, False, False)
 MOTION_HOLD_MS = 100
 MOTION_PALM_FRACTION = 0.08
 
@@ -86,6 +87,7 @@ class GestureMachine:
     def reset(self):
         self.last_sample_ms = None
         self.last_hand = None
+        self.active_index = None
         self.extended_at = None
         self.index_reference = None
         self.control = "idle"
@@ -101,30 +103,53 @@ class GestureMachine:
             self.reset()
             return "idle"
 
-        hand = hands[0]
-        if len(hands) == 1 and self.last_hand is not None:
-            if (hand.side != self.last_hand.side
-                    or dist(hand.center, self.last_hand.center) > 1.5 * max(hand.width, self.last_hand.width)):
+        if len(hands) == 2 and all(all(hand.fingers) for hand in hands):
+            first, second = hands
+            self.last_sample_ms = captured_at_ms
+            self.last_hand = None
+            self.active_index = None
+            separation = dist(first.center, second.center)
+            return self._motion("zoom", (separation, 0), (first.width + second.width) / 2, captured_at_ms)
+
+        active = 0
+        if len(hands) == 2:
+            candidates = [i for i, hand in enumerate(hands) if self._can_control_pair(hand, captured_at_ms)]
+            if len(candidates) != 1:
                 self.reset()
+                return "idle"
+            active = candidates[0]
+
+        hand = hands[active]
+        if self.last_hand is not None and not self._same_hand(hand):
+            self.reset()
         self.last_sample_ms = captured_at_ms
-        self.last_hand = hand if len(hands) == 1 else None
+        self.last_hand = hand
+        self.active_index = active
 
-        if len(hands) == 2 and all(all(h.fingers) for h in hands):
-            separation = dist(hand.center, hands[1].center)
-            return self._motion("zoom", (separation, 0), (hand.width + hands[1].width) / 2, captured_at_ms)
+        if len(hands) == 1 and all(hand.fingers) and hand.facing_camera:
+            return self._motion("pan", hand.center, hand.width, captured_at_ms)
+        if sum(hand.fingers) == 2:
+            return self._motion("rotate", hand.center, hand.width, captured_at_ms)
 
-        if len(hands) == 1:
-            if all(hand.fingers) and hand.facing_camera:
-                return self._motion("pan", hand.center, hand.width, captured_at_ms)
-            if sum(hand.fingers) == 2:
-                return self._motion("rotate", hand.center, hand.width, captured_at_ms)
-
-            self.control = "idle"
-            if hand.fingers == (False, True, False, False, False) or not any(hand.fingers):
-                return self._index_gesture(hand, captured_at_ms)
+        self.control = "idle"
+        if hand.fingers == INDEX_ONLY or not any(hand.fingers):
+            return self._index_gesture(hand, captured_at_ms)
 
         self.reset()
         return "idle"
+
+    def _same_hand(self, hand):
+        previous = self.last_hand
+        return (previous is not None and hand.side == previous.side
+                and dist(hand.center, previous.center) <= 1.5 * max(hand.width, previous.width))
+
+    def _can_control_pair(self, hand, now):
+        if hand.fingers == INDEX_ONLY or sum(hand.fingers) == 2:
+            return True
+
+        # A curled index can complete a click only for the hand that armed it.
+        return (not any(hand.fingers) and self.extended_at is not None
+                and now - self.extended_at <= BEND_WINDOW_MS and self._same_hand(hand))
 
     def _index_gesture(self, hand, now):
         # Compare each joint against the pointing pose. The distal joint can start

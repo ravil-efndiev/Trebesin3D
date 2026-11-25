@@ -142,7 +142,8 @@ if (mode === "live") {
                 pending--;
                 metrics.pending--;
                 const pose = mode === "scene" ? sceneGesture : "pan_ready";
-                const hands = !showHand ? [] : pose === "zoom_in" ? [{ landmarks: mockLandmarks }, { landmarks: secondHand }] : [{ landmarks: mockLandmarks }];
+                const hands = showHand ? [{ landmarks: mockLandmarks }] : [];
+                if (showHand && mode === "scene") hands.push({ landmarks: secondHand });
                 if (sceneGesture === "select") sceneGesture = "cursor";
                 peer.receive({ type: "tracking:result", gesture: showHand ? pose : "idle", hands, streamId, frameId: header.frameId });
               }, mode === "scene" ? 5 : 80);

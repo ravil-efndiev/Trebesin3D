@@ -89,8 +89,25 @@ class GestureTests(unittest.TestCase):
         self.assertEqual(update([hand(OPEN, 0.4), hand(OPEN, 0.8, side="Left")], 120), "zoom_ready")
         self.assertEqual(update([hand(OPEN, 0.25), pair[1]], 180), "zoom_in")
         self.assertEqual(update(pair, 240), "zoom_out")
-        self.assertEqual(update([pair[0], hand([1], 0.7)], 300), "idle")
+        self.assertEqual(update([pair[0], hand([1], 0.7)], 300), "cursor")
         self.assertEqual(update(pair, 360), "zoom_ready")
+
+    def test_pair_follows_only_the_rotating_hand_across_order_changes(self):
+        update = self.machine.update
+        fixed = hand([1, 2], 0.30)
+        self.assertEqual(update([hand(OPEN, side="Left"), fixed], 0), "rotate_ready")
+        self.assertEqual(update([fixed, hand(OPEN, 0.75, side="Left")], 60), "rotate_ready")
+        self.assertEqual(update([hand(OPEN, side="Left"), hand([1, 2], 0.33)], 120), "rotate_left")
+        self.assertEqual(update([hand(OPEN), hand(OPEN, side="Left")], 180), "zoom_ready")
+        self.assertEqual(update([fixed, hand([1], side="Left")], 240), "idle")
+
+    def test_index_bend_with_a_second_hand_visible_selects_once(self):
+        palm = hand(OPEN, 0.8, side="Left")
+        update = self.machine.update
+        self.assertEqual(update([palm, hand([1])], 0), "cursor")
+        self.assertEqual(update([hand([], index_offsets=PARTIAL_INDEX), palm], 60), "idle")
+        self.assertEqual(update([palm, hand([])], 120), "select")
+        self.assertEqual(update([hand([]), palm], 180), "idle")
 
     def test_select_is_a_fast_bend_edge_with_extension_required_to_rearm(self):
         sequence = [([1], "cursor"), ([], "select"), ([], "idle"), ([1], "cursor"), ([], "select")]
@@ -124,7 +141,7 @@ class GestureTests(unittest.TestCase):
             self.assertEqual(self.machine.update([pose], i * 60), expected)
 
     def test_loss_stale_sample_and_hand_substitution_cancel_actions(self):
-        for lost in ([], [None], [hand([1]), hand([])]):
+        for lost in ([], [None], [hand([1]), hand([1, 2])]):
             self.machine.update([hand([1])], 0)
             self.assertEqual(self.machine.update(lost, 60), "idle")
             self.assertEqual(self.machine.update([hand([])], 120), "idle")

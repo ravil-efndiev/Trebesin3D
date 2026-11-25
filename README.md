@@ -87,9 +87,11 @@ In camera mode, the scene consumes the service’s existing gesture observations
 
 Select **Start camera** and allow camera access. The mirrored preview draws landmarks over your hand as you move. The browser samples fresh video frames at up to about 18 frames per second and sends unmirrored JPEGs at up to 640×480, with one frame in flight. Audio is disabled. The app processes frames in memory and neither records nor logs frames or tracking results.
 
+Hold your hands close enough for the camera to see your palms clearly. CVService compares up to four candidate hands by apparent distance and uses the nearest eligible pair or single hand for the overlay and gestures. [Foreground thresholds](docs/streaming-protocol.md)
+
 Each hand uses one color for its joints and bones, saturated blue or purple. The overlay matches nearby palms between fresh samples to keep colors steady when observation order changes. Color assignments reset when tracking clears and do not identify anatomical left or right hands.
 
-The camera panel shows hand count, cursor or camera mode, and the current pan, rotation or zoom direction. Holding a camera pose still shows it as ready. A quick index bend in cursor mode reports a single selection event. [Gesture rules](docs/gesture-rules.md)
+The camera panel shows hand count, cursor or camera mode, and the current pan, rotation or zoom direction. With both hands visible, point or raise two fingers on one hand to control the cursor or rotation. Open both palms to return to zoom. Holding a camera pose still shows it as ready. A quick index bend in cursor mode reports a single selection event. [Gesture rules](docs/gesture-rules.md)
 
 Open the gallery with `?debug=select` to see how many valid select results the browser has received, the last frame and arrival time, and whether the scene used it to pick an exhibit. The readout stays visible after the gesture and resets on reload. [Open select debug](http://127.0.0.1:5173/?debug=select)
 

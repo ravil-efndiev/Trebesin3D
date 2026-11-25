@@ -2,7 +2,7 @@ import type { TrackingSample } from "../utils/types.ts";
 import type { Gesture } from "../utils/gestures.ts";
 import { projects, type ProjectId } from "./projects.ts";
 
-// Match the service's bend window across intermediate single-hand idle samples.
+// Match the service's bend window across intermediate idle samples.
 const cursorMemoryMs = 280;
 
 export const createSceneInput = (reportSelection?: (status: string) => void) => {
@@ -35,7 +35,7 @@ export const createSceneInput = (reportSelection?: (status: string) => void) => 
     } else {
       pointing = false;
       // A partially bent index can produce idle while the same hand is still tracked.
-      if (next !== "idle" || sample?.hands.length !== 1) {
+      if (next !== "idle" || !sample?.hands.length) {
         if (pending) reportSelection?.("Selection cleared before picking");
         pending = false;
         lastCursorAt = null;

@@ -2,6 +2,8 @@
 
 The scene camera is controlled using one-hand and two-hand gestures. When one finger is extended, the application switches to Cursor Mode, and the camera remains stationary.
 
+With two hands visible, point with one index finger to use the cursor or extend two fingers on one hand to rotate. The controls follow that hand, and both outlines stay visible. Open both palms to resume zoom. If both hands request cursor or rotation at once, control pauses until one hand has a clear gesture.
+
 ## Camera Mode
 
 ### Camera Movement (Left, Right, Up, Down)

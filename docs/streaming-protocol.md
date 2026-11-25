@@ -44,6 +44,10 @@ Each valid v3 frame receives one text response after inference. An empty scene p
 
 A result contains zero to two hand objects. Each has one field, `landmarks`, an array of exactly 21 finite `[x,y,z]` triples in MediaPipe order (wrist, then four joints per finger from thumb to little finger). Coordinates use the submitted unmirrored image. The origin is top left, x increases to the right in units of image width, and y increases downward in units of image height. Points can fall beyond image edges. Depth is relative to the wrist in approximate x units, with smaller values closer to the camera. It has no calibrated world scale. The service rounds coordinates to five decimal places and accepts magnitudes up to 8. Array order applies only to this sample and conveys no persistent hand identity.
 
+V2 and v3 return at most two hands. Once the regular tracker fills both slots, every third frame uses a four-candidate tracker to look for a newly arrived hand. If it discovers an additional or spatially distinct hand, it continues tracking the scene until there are no detections. Each frame runs one inference. A stream creates its wider tracker on first use and releases both at teardown. For each candidate, CVService estimates apparent scale by comparing five palm segments in image pixels with the same segments in the model’s projected world landmarks. This accounts for palm tilt and uses the shorter image edge to normalize for resolution. A candidate needs a scale of at least 1.2 shorter image edges per estimated meter and at least 80% of the nearest candidate’s scale. CVService takes the nearest eligible hands, skipping duplicate left or right labels when both predictions have at least 90% confidence.
+
+When a smaller hand is rejected alongside a foreground hand, the service remembers the foreground scale so the rejected hand cannot immediately take over when the nearer hand leaves. An empty scene or a gap of 200 ms between inferences clears that reference. Only the selected hands reach the overlay and gesture recognizer. Apparent scale estimates relative distance. People holding their hands at similar depths can still be confused.
+
 The browser matches both IDs to its outstanding frame. It draws using the capture dimensions and expires the sample 200 ms after its local capture timestamp. Empty results, matching rejections, disconnect, stop, and pause clear the overlay. A stale but matching result still frees the frame slot. A fresh empty result displays `0 hands · Idle`. Expired or unavailable tracking clears the gesture label. V2 responses carry landmarks only and omit `gesture`. V1 continues to return `{"type":"frame:ack","streamId":"example","frameId":1}` after JPEG validation.
 
 ### Gesture state in v3
@@ -53,11 +57,13 @@ The required `gesture` string describes the submitted frame. Hand count comes fr
 | Observed pose | Allowed gesture values |
 | --- | --- |
 | Zero hands or an unrecognized pose with one or two hands | `idle` |
-| One hand with only the index extended | `cursor` |
+| Only the index extended on the controlling hand (one or two hands visible) | `cursor` |
 | A quick bend of that index with the other fingers folded | `select` for one frame |
 | One open palm facing the camera | `pan_ready`, `pan_left`, `pan_right`, `pan_up`, `pan_down` |
-| One hand with exactly two fingers extended | `rotate_ready`, `rotate_left`, `rotate_right` |
+| Exactly two fingers extended on the controlling hand (one or two hands visible) | `rotate_ready`, `rotate_left`, `rotate_right` |
 | Two open palms | `zoom_ready`, `zoom_in`, `zoom_out` |
+
+When two hands are visible, a single pointing or rotating hand controls the gesture. V3 places that hand first in the result, so the cursor uses `hands[0].landmarks[8]`. Both hands keep their overlay. A bend can select only if that same hand was pointing. If both hands request cursor or rotation together, the gesture is `idle` until one controller is clear. Two open palms enter zoom with a fresh motion reference.
 
 Pose classification uses the metric landmark chains for finger extension and the wrist, index and pinky knuckles plus the model’s handedness for palm orientation. Motion uses the palm center in the image plane. Horizontal directions follow the mirrored preview, and up is toward the image top. Pan reports the dominant axis. Rotation uses horizontal displacement. Zoom compares the distance between palm centers in aspect-corrected coordinates, independent of the order of the two hands.
 

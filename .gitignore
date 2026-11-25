@@ -38,3 +38,6 @@ CVService/models/*.task
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# Unoptimized 3D models
+*.raw.glb
