@@ -1,34 +1,21 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
-import { X } from "lucide-react";
-import CameraView from "./components/CameraView.tsx";
+import GallerySidebar from "./components/GallerySidebar.tsx";
+import CameraPanel from "./components/CameraPanel.tsx";
 import { createSceneInput } from "./scene/handInput.ts";
-import { projects, type ProjectId } from "./scene/projects.ts";
-import type { SelectReceipt } from "./utils/types.ts";
+import type { ProjectId } from "./scene/projects.ts";
 import brand from "./assets/trebesin.svg";
 import gallery from "./assets/gallery.webp";
 
 const PortfolioScene = lazy(() => import("./components/PortfolioScene.tsx"));
 const selectDebug = new URLSearchParams(window.location.search).get("debug") === "select";
-const receiptLabels = {
-  fresh: "Fresh result",
-  expired: "Frame expired before arrival",
-  unmatched: "Result did not match the active frame",
-} as const;
 
 const App = () => {
   const [pickStatus, setPickStatus] = useState("");
-  const [receipt, setReceipt] = useState<(SelectReceipt & { count: number; time: string }) | null>(null);
   const [input] = useState(() => createSceneInput(selectDebug ? setPickStatus : undefined));
-  const reportReceipt = useCallback((next: SelectReceipt) => {
-    const time = new Date().toLocaleTimeString();
-    setReceipt((previous) => ({ ...next, time, count: (previous?.count ?? 0) + 1 }));
-    setPickStatus("Waiting for scene");
-  }, []);
   const [hovered, setHovered] = useState<ProjectId | null>(null);
   const [selected, setSelected] = useState<ProjectId | null>(null);
   const [focused, setFocused] = useState<ProjectId | null>(null);
   const active = selected ?? focused ?? hovered;
-  const project = projects.find(({ id }) => id === active);
   const clear = useCallback(() => {
     setSelected(null);
     setFocused(null);
@@ -50,35 +37,9 @@ const App = () => {
       <Suspense fallback={ null }>
         <PortfolioScene input={ input } active={ active } selected={ selected } onHover={ setHovered } onSelect={ setSelected } onFocus={ setFocused } />
       </Suspense>
-      <aside aria-label="Camera and project details" className="absolute top-3 right-3 z-10 grid max-h-[calc(100%-1.5rem)] w-[clamp(9.5rem,41vw,14rem)] gap-2 overflow-y-auto overscroll-contain sm:top-6 sm:right-6 sm:max-h-[calc(100%-3rem)] sm:w-[clamp(12rem,19vw,16rem)]">
-        <CameraView onTracking={ input.observe } onSelectReceipt={ selectDebug ? reportReceipt : undefined } />
-        { selectDebug && (
-          <section aria-label="Select debug" className="rounded-[4px] border border-edge bg-panel px-3 py-2.5 text-xs text-muted">
-            <h2 className="font-semibold text-ice">Select debug</h2>
-            <div role="status" className="mt-1 space-y-1 font-mono">
-              <p>Received from CVService: { receipt?.count ?? 0 }</p>
-              { receipt ? (
-                <>
-                  <p>Last select at { receipt.time } · Frame { receipt.frameId }</p>
-                  <p>{ receiptLabels[receipt.status] }</p>
-                  { receipt.status === "fresh" && <p>{ pickStatus }</p> }
-                </>
-              ) : <p>Waiting for a select event</p> }
-            </div>
-          </section>
-        ) }
-        { project && (
-          <section aria-labelledby="project-name" className="relative rounded-[4px] border border-edge bg-panel px-3 py-3.5 shadow-lg before:absolute before:top-4 before:-left-px before:h-5 before:w-0.5 before:bg-accent sm:px-4">
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-mono text-xs text-accent">{ project.field }</span>
-              { selected === active && <button type="button" onClick={ clear } aria-label="Clear project selection" className="-my-1 -mr-1 grid size-7 place-items-center rounded-sm text-muted hover:text-white"><X size={ 16 } aria-hidden="true" /></button> }
-            </div>
-            <h2 id="project-name" className="my-2 text-xl leading-tight font-medium tracking-tight sm:text-2xl">{ project.name }</h2>
-            <p className="text-sm leading-relaxed text-muted">{ project.description }</p>
-            <p className="mt-3 font-mono text-xs text-[#99acbf]">{ project.collection }</p>
-          </section>
-        ) }
-      </aside>
+      <GallerySidebar active={ active } selected={ selected } onClear={ clear }>
+        <CameraPanel onTracking={ input.observe } selectDebug={ selectDebug } pickStatus={ pickStatus } onPickStatus={ setPickStatus } />
+      </GallerySidebar>
     </main>
   );
 };

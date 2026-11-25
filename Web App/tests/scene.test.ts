@@ -3,8 +3,7 @@ import { readFile } from "node:fs/promises";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { fitModel } from "../src/scene/fitModel.ts";
 import { test } from "node:test";
-import { Box3, Group, Mesh, MeshBasicMaterial, PerspectiveCamera, Vector2, Vector3 } from "three";
-import { projectGeometry } from "../src/scene/geometry.ts";
+import { Box3, Group, BoxGeometry, RingGeometry, Texture, Mesh, MeshBasicMaterial, PerspectiveCamera, Vector2, Vector3 } from "three";
 import { createPicker, focusView, homeView, moveFocus, moveView, positionCamera, positionFocusCamera, turnView } from "../src/scene/interaction.ts";
 import { fieldOfView, galleryLayout, hall, homeDepth, projects } from "../src/scene/projects.ts";
 import { createSceneInput } from "../src/scene/handInput.ts";
@@ -183,33 +182,32 @@ test("selection frames a fixed exhibit, supports both orbit gestures and preserv
 
 test("raycasting uses the real mesh silhouette and nearest surface, including the opening in the ring", () => {
   const material = new MeshBasicMaterial();
-  const loop = new Mesh(projectGeometry.phase(), material);
-  loop.userData.projectId = "phase";
-  const helix = new Mesh(projectGeometry.helix(), material);
-  helix.userData.projectId = "helix";
-  helix.position.z = -4;
-  helix.scale.setScalar(2);
-  helix.updateMatrixWorld();
+  const loop = new Mesh(new RingGeometry(1, 1.4, 64), material);
+  loop.userData.projectId = "albiLab";
+  const backMesh = new Mesh(new BoxGeometry(1, 1, 1), material);
+  backMesh.userData.projectId = "slotMachine";
+  backMesh.position.z = -4;
+  backMesh.scale.setScalar(2);
+  backMesh.updateMatrixWorld();
   const camera = new PerspectiveCamera(fieldOfView, 1, 0.1, 100);
   camera.position.z = homeDepth;
   camera.updateMatrixWorld();
   const pick = createPicker();
   assert.equal(pick(new Vector2(0, 0), camera, [loop]), null);
-  assert.equal(pick(new Vector2(0, 0), camera, [loop, helix]), "helix");
+  assert.equal(pick(new Vector2(0, 0), camera, [loop, backMesh]), "slotMachine");
   const rim = new Vector3(1.18, 0, 0).project(camera);
-  assert.equal(pick(new Vector2(rim.x, rim.y), camera, [helix, loop]), "phase");
+  assert.equal(pick(new Vector2(rim.x, rim.y), camera, [backMesh, loop]), "albiLab");
   loop.geometry.dispose();
-  helix.geometry.dispose();
+  backMesh.geometry.dispose();
   material.dispose();
 });
 
 test("all three exhibits fit the home view with separate screen bounds on wide and narrow displays", async () => {
-  const material = new MeshBasicMaterial();
+  // The layout test needs the real meshes. Firefox covers texture decoding.
+  const loader = new GLTFLoader().register(() => ({ name: "layout-test", loadTexture: async () => new Texture() }));
   const models = await Promise.all(projects.map(async (project) => {
-    if (!("model" in project)) return new Mesh(projectGeometry[project.id](), material);
-
     const bytes = await readFile(new URL(project.model.url));
-    const gltf = await new GLTFLoader().parseAsync(new Uint8Array(bytes).buffer, "");
+    const gltf = await loader.parseAsync(new Uint8Array(bytes).buffer, "");
     const fitted = fitModel(gltf.scene, project.model.span);
     const bounds = new Box3().setFromObject(fitted, true);
     assert.ok(bounds.getCenter(new Vector3()).length() < 1e-5);
@@ -224,13 +222,13 @@ test("all three exhibits fit the home view with separate screen bounds on wide a
     const camera = new PerspectiveCamera(fieldOfView, width / height, 0.1, 100);
     camera.position.z = homeDepth;
     camera.updateMatrixWorld();
-    assert.ok(layout.helix.z - layout.phase.z >= 12 && layout.phase.z - layout.omnicar.z >= 14);
+    assert.ok(layout.slotMachine.z - layout.albiLab.z >= 12 && layout.albiLab.z - layout.omnicar.z >= 14);
     const boxes = models.map((mesh, i) => {
       const id = projects[i].id;
       const pose = layout[id];
       mesh.position.set(pose.x, pose.y, pose.z);
       mesh.scale.setScalar(pose.scale);
-      mesh.rotation.set(id === "phase" ? 0.08 : 0.19, -0.48, 0);
+      mesh.rotation.set(id === "albiLab" ? 0.08 : 0.19, id === "slotMachine" ? -1.4 : -0.48, 0);
       mesh.updateMatrixWorld();
       const screen = new Box3();
       const point = new Vector3();
@@ -243,10 +241,10 @@ test("all three exhibits fit the home view with separate screen bounds on wide a
           screen.expandByPoint(point.project(camera));
         }
       });
-      if (id === "omnicar") {
-        const center = screen.getCenter(new Vector3());
-        assert.equal(createPicker()(center, camera, models), id);
-      }
+      const center = screen.getCenter(new Vector3());
+      // The cabinet sits left of the loose coins in the front view.
+      if (id === "slotMachine") center.x -= 0.25 * (screen.max.x - screen.min.x);
+      assert.equal(createPicker()(center, camera, models), id);
       assert.ok(screen.min.x > -1 && screen.max.x < 1 && screen.min.y > -1 && screen.max.y < 1, id);
       screen.min.z = screen.max.z = 0;
       return screen;
@@ -256,5 +254,4 @@ test("all three exhibits fit the home view with separate screen bounds on wide a
     }
   }
   models.forEach((model) => model.traverse((child) => { if (child instanceof Mesh) child.geometry.dispose(); }));
-  material.dispose();
 });

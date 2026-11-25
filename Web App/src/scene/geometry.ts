@@ -65,55 +65,6 @@ const meshBuilder = () => {
   return { box, solid, build };
 };
 
-const pavilion = () => {
-  const mesh = meshBuilder();
-  for (let floor = 0; floor < 10; floor++) {
-    const angle = -0.72 + floor * 0.134;
-    const level = (floor - 4.5) * 0.24;
-    const width = 3.04 - 0.13 * Math.cos(floor * 0.69);
-    const depth = 2.03 + 0.12 * Math.sin(floor * 0.5);
-    const block = (x: number, y: number, z: number, w: number, h: number, d: number, material: Finish) => mesh.box(x, level + y, z, w, h, d, material, angle);
-    block(0, 0, 0, width, 0.105, depth, "metal");
-    block(0, -0.059, 0, width - 0.055, 0.018, depth - 0.055, "trim");
-    if (floor === 9) {
-      block(0, 0.062, 0, width - 0.16, 0.025, depth - 0.19, "roof");
-      for (let rib = -8; rib <= 8; rib++) block(rib * 0.15, 0.09, 0, 0.075, 0.05, depth - 0.28, "metal");
-      continue;
-    }
-    const w = width - 0.36;
-    const d = depth - 0.39;
-    block(0, 0.145, 0, w, 0.17, d, "glass");
-    for (const side of [-1, 1]) {
-      for (let i = 0; i < 9; i++) {
-        const x = (i / 8 - 0.5) * w;
-        block(x, 0.146, side * d / 2, 0.025, 0.172, 0.039, "trim");
-        if ((i + floor) % 4 === 1) block(x + 0.13, 0.148, side * (d / 2 + 0.003), 0.24, 0.13, 0.012, "pane");
-      }
-    }
-  }
-  return mesh.build();
-};
-
-const phaseLoop = () => {
-  const mesh = meshBuilder();
-  for (let i = 0; i < 96; i++) {
-    const t = i * Math.PI * 2 / 96;
-    const twist = 0.5 * t + 0.3;
-    const corners = Array.from({ length: 8 }, (_, k): Point => {
-      const wide = k & 1 ? 0.46 : -0.46;
-      const deep = k & 2 ? 0.29 : -0.29;
-      const along = k & 4 ? 0.024 : -0.024;
-      const radius = 1.18 + Math.cos(twist) * wide - Math.sin(twist) * deep;
-      const y = Math.sin(t) * radius + Math.cos(t) * along;
-      return [Math.cos(t) * radius - Math.sin(t) * along + 0.17 * y, y, Math.sin(twist) * wide + Math.cos(twist) * deep];
-    });
-    mesh.solid(corners, "metal", "violet");
-  }
-  return mesh.build();
-};
-
-export const projectGeometry = { helix: pavilion, phase: phaseLoop };
-
 export const galleryGeometry = () => {
   const room = meshBuilder();
   const { halfWidth, halfDepth, height } = hall;

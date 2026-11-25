@@ -23,7 +23,7 @@ class RendererBoundary extends Component<{ children: ReactNode; onUnavailable: (
 
 const PortfolioScene = ({ input, active, selected, onHover, onSelect, onFocus }: Props) => {
   const cursor = useRef<HTMLSpanElement>(null);
-  const rotations = useRef({ helix: -0.48, phase: -0.32, omnicar: -0.52 });
+  const rotations = useRef({ slotMachine: -1.4, albiLab: -0.32, omnicar: -0.52 });
   const [available, setAvailable] = useState(true);
   const unavailable = useCallback(() => {
     setAvailable(false);

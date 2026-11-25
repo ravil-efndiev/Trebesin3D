@@ -1,6 +1,6 @@
 export const projects = [
-  { id: "helix", name: "Helix Pavilion", field: "Architecture", collection: "School project", description: "Ten aluminium floor plates twist around a recessed glass core." },
-  { id: "phase", name: "Phase Loop", field: "Object design", collection: "Personal project", description: "A half-turn of titanium fins gives this open ring two distinct profiles." },
+  { id: "slotMachine", model: { url: new URL("../assets/projectModels/esp-slot-machine.glb", import.meta.url).href, span: 3.7 }, name: "ESP Slot Machine", field: "Electronics", collection: "Personal project", description: "Functional slot machine made on ESP and Arduino microcontrollers", externalLink: "*insert online slot machine web app when deployed*" },
+  { id: "albiLab", model: { url: new URL("../assets/projectModels/albi-lab.glb", import.meta.url).href, span: 3.4 }, name: "Albi Lab", field: "3D design", collection: "Personal project", description: "A smart plant-growing station with sensors that monitor environmental conditions and automatically control watering and lighting." },
   { id: "omnicar", model: { url: new URL("../assets/projectModels/omnicar-gallery.glb", import.meta.url).href, span: 4.1 }, name: "Omni-Car", field: "Robotics", collection: "School project", description: "A four-wheel robot with mecanum wheels and ultrasonic sensors." },
 ] as const;
 
@@ -25,10 +25,10 @@ export const galleryLayout = (width: number, height: number) => {
     };
   };
 
-  const helix = portrait ? place(0.29, 0.64, 6.5, 0.45, 0.31, 3.7) : place(0.48 * space, 0.58, 6.5, 0.27 * space, 0.40, 3.7);
-  const phase = portrait ? place(0.20, 0.30, -7, 0.27, 0.18, 3.4) : place(0.105 * space, 0.35, -7, 0.17 * space, 0.23, 3.4);
+  const slotMachine = portrait ? place(0.29, 0.64, 6.5, 0.45, 0.31, 3.7) : place(0.48 * space, 0.58, 6.5, 0.27 * space, 0.40, 3.7);
+  const albiLab = portrait ? place(0.20, 0.30, -7, 0.27, 0.18, 3.4) : place(0.105 * space, 0.35, -7, 0.17 * space, 0.23, 3.4);
   const omnicar = portrait ? place(0.79, 0.78, -23, 0.30, 0.22, 4.1) : place(0.90 * space, 0.51, -23, 0.155 * space, 0.25, 4.1);
-  const floor = Math.min(helix.y - 1.2 * helix.scale, omnicar.y - 1.25 * omnicar.scale, phase.y - 1.7 * phase.scale, -3.5) - 2.2;
-  const pivot = { x: (helix.x + phase.x + omnicar.x) / 3, z: (helix.z + phase.z + omnicar.z) / 3 };
-  return { helix, phase, omnicar, floor, pivot };
+  const floor = Math.min(slotMachine.y - 1.2 * slotMachine.scale, omnicar.y - 1.25 * omnicar.scale, albiLab.y - 1.7 * albiLab.scale, -3.5) - 2.2;
+  const pivot = { x: (slotMachine.x + albiLab.x + omnicar.x) / 3, z: (slotMachine.z + albiLab.z + omnicar.z) / 3 };
+  return { slotMachine, albiLab, omnicar, floor, pivot };
 };

@@ -1,6 +1,6 @@
 # Trebesin 3D
 
-Interactive portfolio for school and personal projects. Helix Pavilion, Phase Loop, and Omni-Car float in a full-screen Three.js gallery. The upper-right panel controls the optional camera, with project details directly beneath it.
+Interactive portfolio for school and personal projects. ESP Slot Machine, Albi Lab, and Omni-Car float in a full-screen Three.js gallery. The upper-right panel controls the optional camera, with project details directly beneath it.
 
 The React app streams opt-in camera capture to FastAPI through a local Vite proxy. CVService validates each JPEG, runs MediaPipe Hand Landmarker, and returns up to two sets of 21 joints. The browser draws those joints and displays the gesture state recognized by CVService. [Task 3 implementation and acceptance plan](docs/hand-tracking-plan.md). See [AGENTS.md](AGENTS.md) for requirements and development rules.
 

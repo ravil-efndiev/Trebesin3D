@@ -21,30 +21,30 @@ export const checkScene = async (tip: number[], showHand: (visible: boolean) => 
     await until(() => Boolean(document.querySelector('[aria-label="3D project gallery"] canvas') && cameraButton()), "Gallery did not mount");
     if (tracks.length) throw new Error("Camera was requested before Start");
     const portrait = innerWidth <= innerHeight;
-    // These points are inside the pavilion at the home view on the desktop and phone test sizes.
-    tip[0] = portrait ? 0.71 : 0.62;
+    // These points are inside the slot machine at the home view on the desktop and phone test sizes.
+    tip[0] = portrait ? 0.81 : 0.67;
     tip[1] = portrait ? 0.64 : 0.57;
     cameraButton()!.click();
 
-    await until(() => project() === "Helix Pavilion" && !pinned(), "Pointing did not reveal the pavilion");
+    await until(() => project() === "ESP Slot Machine" && !pinned(), "Pointing did not reveal the slot machine");
     showHand(false);
     await until(() => !project(), "Empty results did not clear hand hover");
     showHand(true);
-    await until(() => project() === "Helix Pavilion", "Hover did not recover");
+    await until(() => project() === "ESP Slot Machine", "Hover did not recover");
     const pointingY = tip[1];
     pose("idle");
     tip[1] = 0.98;
     await until(() => !project(), "Intermediate bend did not stop pointer hover");
     pose("select");
-    await until(pinned, "Index bend did not select the pavilion");
+    await until(pinned, "Index bend did not select the slot machine");
     if (new URLSearchParams(location.search).get("debug") === "select") {
       const debug = () => document.querySelector('[aria-label="Select debug"]')?.textContent ?? "";
-      await until(() => debug().includes("Received from CVService: 1") && debug().includes("Picked Helix Pavilion"), "Select debug did not record receipt and pick");
+      await until(() => debug().includes("Received from CVService: 1") && debug().includes("Picked ESP Slot Machine"), "Select debug did not record receipt and pick");
     }
     showHand(false);
     tip[1] = pointingY;
     await until(() => cameraButton()?.parentElement?.textContent?.includes("0 hands") === true, "Missing empty-hand result");
-    if (!pinned() || project() !== "Helix Pavilion") throw new Error("Selection disappeared after release");
+    if (!pinned() || project() !== "ESP Slot Machine") throw new Error("Selection disappeared after release");
     document.querySelector<HTMLButtonElement>('[aria-label="Clear project selection"]')!.click();
     await until(() => !project(), "Dismiss did not clear selection");
 
@@ -52,7 +52,7 @@ export const checkScene = async (tip: number[], showHand: (visible: boolean) => 
     const cameraStatus = () => document.querySelector('[aria-label="Camera streaming"] [role="status"]')?.textContent ?? "";
     showHand(true);
     for (const gesture of ["zoom_in", "rotate_right"] as const) {
-      await until(() => project() === "Helix Pavilion", "Home view did not restore the same hand target");
+      await until(() => project() === "ESP Slot Machine", "Home view did not restore the same hand target");
       const camera = _roots.get(canvas)!.store.getState().camera;
       const start = camera.position.clone();
       const { pivot } = galleryLayout(canvas.clientWidth, canvas.clientHeight);
@@ -76,10 +76,10 @@ export const checkScene = async (tip: number[], showHand: (visible: boolean) => 
       pose("cursor");
       await until(() => cameraStatus().includes("2 hands · Cursor"), "Did not return to cursor mode");
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      if (project() === "Helix Pavilion") throw new Error(gesture + " left the original target under the cursor");
+      if (project() === "ESP Slot Machine") throw new Error(gesture + " left the original target under the cursor");
       canvas.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true }));
     }
-    await until(() => project() === "Helix Pavilion", "Reset after turning did not restore the pavilion");
+    await until(() => project() === "ESP Slot Machine", "Reset after turning did not restore the slot machine");
     cameraButton()!.click();
     await until(() => tracks.length > 0 && tracks.every((track) => track.readyState === "ended"), "Stop did not release the tracks");
     report.value = "PASS · hover, loss, selection, dual-color zoom, turning, view reset and camera cleanup";
