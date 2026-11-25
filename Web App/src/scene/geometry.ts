@@ -2,14 +2,13 @@ import { BufferGeometry, Color, Float32BufferAttribute, Vector3 } from "three";
 import { hall } from "./projects.ts";
 
 const finishes = {
-  metal: 0xc0d3e3, trim: 0x708ba4, glass: 0x28445b, pane: 0x507995, roof: 0x40516a, violet: 0xa799c6,
   floor: 0x35415b, wall: 0x263248, column: 0x304057, recess: 0x172334, joint: 0x243047, light: 0xa3d0e3,
 };
 type Finish = keyof typeof finishes;
 type Point = [number, number, number];
 const sides = [[0, 1, 3, 2], [4, 6, 7, 5], [0, 4, 5, 1], [2, 3, 7, 6], [0, 2, 6, 4], [1, 5, 7, 3]];
 
-// Bake the differently oriented plates and fins into one pickable mesh per exhibit.
+// Combine the gallery's architectural details into one mesh.
 const meshBuilder = () => {
   const positions: number[] = [];
   const colors: number[] = [];
@@ -20,14 +19,17 @@ const meshBuilder = () => {
   const center = new Vector3();
   const corner = new Vector3();
 
-  const solid = (corners: Point[], material: Finish, sideMaterial = material) => {
-    center.set(0, 0, 0);
-    for (const point of corners) center.add(corner.fromArray(point));
-    center.multiplyScalar(1 / corners.length);
+  const box = (x: number, y: number, z: number, width: number, height: number, depth: number, material: Finish) => {
+    center.set(x, y, z);
+    color.setHex(finishes[material]);
+    const corners = Array.from({ length: 8 }, (_, i): Point => [
+      x + (i & 1 ? 0.5 : -0.5) * width,
+      y + (i & 2 ? 0.5 : -0.5) * height,
+      z + (i & 4 ? 0.5 : -0.5) * depth,
+    ]);
 
-    sides.forEach((face, side) => {
+    for (const face of sides) {
       const start = positions.length / 3;
-      color.setHex(finishes[side < 2 ? sideMaterial : material]);
       for (const i of face) {
         positions.push(...corners[i]);
         colors.push(color.r, color.g, color.b);
@@ -39,18 +41,7 @@ const meshBuilder = () => {
       const second = start + (outward ? 1 : 3);
       const fourth = start + (outward ? 3 : 1);
       indices.push(start, second, start + 2, start, start + 2, fourth);
-    });
-  };
-
-  const box = (x: number, y: number, z: number, width: number, height: number, depth: number, material: Finish, angle = 0) => {
-    const cosine = Math.cos(angle);
-    const sine = Math.sin(angle);
-    const corners = Array.from({ length: 8 }, (_, i): Point => {
-      const dx = x + (i & 1 ? 0.5 : -0.5) * width;
-      const dz = z + (i & 4 ? 0.5 : -0.5) * depth;
-      return [dx * cosine + dz * sine, y + (i & 2 ? 0.5 : -0.5) * height, dz * cosine - dx * sine];
-    });
-    solid(corners, material);
+    }
   };
 
   const build = () => {
@@ -62,7 +53,7 @@ const meshBuilder = () => {
     geometry.computeBoundingSphere();
     return geometry;
   };
-  return { box, solid, build };
+  return { box, build };
 };
 
 export const galleryGeometry = () => {
