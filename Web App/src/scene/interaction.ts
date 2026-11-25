@@ -1,5 +1,5 @@
 import { Raycaster, Vector2, Vector3 } from "three";
-import type { Camera, Intersection, Mesh } from "three";
+import type { Camera, Intersection, Object3D } from "three";
 import type { Gesture } from "../utils/gestures.ts";
 import type { ProjectId } from "./projects.ts";
 import { hall, homeDepth } from "./projects.ts";
@@ -147,12 +147,14 @@ export const moveFocus = (focus: Focus, gesture: Gesture, delta: number) => {
 
 export const createPicker = () => {
   const raycaster = new Raycaster();
-  const intersections: Intersection<Mesh>[] = [];
+  const intersections: Intersection<Object3D>[] = [];
   const point = new Vector2();
-  return (cursor: { x: number; y: number }, camera: Camera, models: Mesh[]): ProjectId | null => {
+  return (cursor: { x: number; y: number }, camera: Camera, models: Object3D[]): ProjectId | null => {
     intersections.length = 0;
     raycaster.setFromCamera(point.set(cursor.x, cursor.y), camera);
-    raycaster.intersectObjects(models, false, intersections);
-    return intersections[0]?.object.userData.projectId ?? null;
+    raycaster.intersectObjects(models, true, intersections);
+    let hit: Object3D | null = intersections[0]?.object ?? null;
+    while (hit && !hit.userData.projectId) hit = hit.parent;
+    return hit?.userData.projectId ?? null;
   };
 };

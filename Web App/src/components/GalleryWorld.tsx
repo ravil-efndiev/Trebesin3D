@@ -1,11 +1,12 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { RefObject } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { DataTexture, Group, LinearFilter, Mesh, Quaternion, RGBAFormat, Vector2, Vector3 } from "three";
+import { DataTexture, Group, LinearFilter, Quaternion, RGBAFormat, Vector2, Vector3 } from "three";
 import { galleryGeometry, projectGeometry } from "../scene/geometry.ts";
 import { createPicker, focusView, homeView, moveFocus, moveView, positionCamera, positionFocusCamera, travel } from "../scene/interaction.ts";
 import type { SceneInput } from "../scene/handInput.ts";
 import { galleryLayout, projects, type ProjectId } from "../scene/projects.ts";
+import ProjectModel from "./ProjectModel.tsx";
 import useGalleryControls, { type GalleryDrag, type GalleryFocus } from "./useGalleryControls.ts";
 
 interface Props {
@@ -39,7 +40,7 @@ const shadowTexture = () => {
 const GalleryWorld = ({ input, active, selected, rotations, cursor, onHover, onSelect, onUnavailable }: Props) => {
   const { camera, gl, size } = useThree();
   const exhibits = useRef<Group>(null);
-  const targets = useRef<Mesh[]>([]);
+  const targets = useRef<Group[]>([]);
   const lastHover = useRef<ProjectId | null>(null);
   const pick = useMemo(createPicker, []);
   const pointer = useMemo(() => new Vector2(), []);
@@ -53,13 +54,13 @@ const GalleryWorld = ({ input, active, selected, rotations, cursor, onHover, onS
   const transition = useMemo(() => ({ elapsed: Infinity, from: new Vector3(), rotation: new Quaternion(), goal: camera.clone() }), [camera]);
   const initialPivot = useRef(layout.pivot);
   const assets = useMemo(() => ({
-    helix: projectGeometry.helix(), phase: projectGeometry.phase(), house: projectGeometry.house(),
+    helix: projectGeometry.helix(), phase: projectGeometry.phase(),
     room: galleryGeometry(), shadow: shadowTexture(),
   }), []);
 
   useEffect(() => () => { Object.values(assets).forEach((asset) => asset.dispose()); }, [assets]);
   useLayoutEffect(() => {
-    targets.current = exhibits.current!.children.filter((child): child is Mesh => child instanceof Mesh);
+    targets.current = exhibits.current!.children.filter((child): child is Group => child instanceof Group);
   }, []);
   useLayoutEffect(() => {
     if (focus.current || transition.elapsed < focusTransitionSeconds) return;
@@ -112,8 +113,7 @@ const GalleryWorld = ({ input, active, selected, rotations, cursor, onHover, onS
       if (selected) {
         const model = targets.current.find((mesh) => mesh.userData.projectId === selected)!;
         const { x, y, z, scale } = layout[selected];
-        if (!model.geometry.boundingSphere) model.geometry.computeBoundingSphere();
-        focus.current = { id: selected, view: focusView(new Vector3(x, y, z), camera.position, model.geometry.boundingSphere!.radius * scale) };
+        focus.current = { id: selected, view: focusView(new Vector3(x, y, z), camera.position, model.userData.focusRadius * scale) };
       } else {
         focus.current = null;
       }
@@ -181,13 +181,23 @@ const GalleryWorld = ({ input, active, selected, rotations, cursor, onHover, onS
         <meshStandardMaterial vertexColors roughness={ 0.9 } />
       </mesh>
       <group ref={ exhibits }>
-        { projects.map(({ id }) => (
-          <mesh key={ id } geometry={ assets[id] } userData={ { projectId: id } }
-            position={ [layout[id].x, layout[id].y, layout[id].z] } scale={ layout[id].scale }
-            rotation={ [id === "phase" ? 0.08 : 0.19, rotations.current[id], 0] }>
-            <meshStandardMaterial vertexColors metalness={ 0.28 } roughness={ 0.52 } emissive={ active === id ? "#232039" : "#000000" } />
-          </mesh>
-        )) }
+        { projects.map((project) => {
+          const { id } = project;
+          const radius = "model" in project ? project.model.span / 2 : assets[project.id].boundingSphere!.radius;
+          return (
+            <group key={ id } userData={ { projectId: id, focusRadius: radius } }
+              position={ [layout[id].x, layout[id].y, layout[id].z] } scale={ layout[id].scale }
+              rotation={ [id === "phase" ? 0.08 : 0.19, rotations.current[id], 0] }>
+              { "model" in project ? (
+                <Suspense fallback={ null }><ProjectModel { ...project.model } /></Suspense>
+              ) : (
+                <mesh geometry={ assets[project.id] }>
+                  <meshStandardMaterial vertexColors metalness={ 0.28 } roughness={ 0.52 } emissive={ active === id ? "#232039" : "#000000" } />
+                </mesh>
+              ) }
+            </group>
+          );
+        }) }
       </group>
       { projects.map(({ id }) => (
         <group key={ id } position={ [layout[id].x, layout.floor + 0.018, layout[id].z] } rotation-x={ -Math.PI / 2 } scale={ layout[id].scale }>

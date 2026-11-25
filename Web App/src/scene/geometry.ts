@@ -1,5 +1,5 @@
 import { BufferGeometry, Color, Float32BufferAttribute, Vector3 } from "three";
-import { hall, type ProjectId } from "./projects.ts";
+import { hall } from "./projects.ts";
 
 const finishes = {
   metal: 0xc0d3e3, trim: 0x708ba4, glass: 0x28445b, pane: 0x507995, roof: 0x40516a, violet: 0xa799c6,
@@ -112,25 +112,7 @@ const phaseLoop = () => {
   return mesh.build();
 };
 
-const offsetHouse = () => {
-  const mesh = meshBuilder();
-  const block = (x: number, y: number, z: number, w: number, h: number, d: number, material: Finish) => mesh.box(x + 0.15, y - 1.79, z, w, h, d, material);
-  block(0.2, 0.75, 0.05, 2.73, 0.21, 2.18, "metal");
-  block(0.48, 1.25, 0.02, 1.84, 0.86, 1.51, "glass");
-  block(1.23, 1.25, 0.1, 0.22, 1, 2.1, "metal");
-  block(-0.5, 1.3, -0.6, 0.23, 1.1, 1.4, "metal");
-  block(-0.32, 1.82, 0, 3.58, 0.25, 2.38, "metal");
-  block(-1.98, 2.24, 0, 0.23, 0.7, 2.38, "metal");
-  block(-0.54, 2.25, -0.93, 2.7, 0.79, 0.22, "metal");
-  block(-0.24, 2.25, -0.02, 2.48, 0.63, 1.4, "glass");
-  for (let i = 0; i < 19; i++) block(-1.68 + i * 0.092, 2.25, 0.91, 0.037, 0.76, 0.235, "trim");
-  block(-0.38, 2.72, -0.02, 3.5, 0.19, 2.42, "metal");
-  block(0.63, 2.86, -0.25, 0.91, 0.12, 1.2, "roof");
-  for (let step = 0; step < 9; step++) block(1.31 - step * 0.178, 0.75 + step * 0.056, 1, 0.19, 0.075, 0.62, "metal");
-  return mesh.build();
-};
-
-export const projectGeometry: Record<ProjectId, () => BufferGeometry> = { helix: pavilion, phase: phaseLoop, house: offsetHouse };
+export const projectGeometry = { helix: pavilion, phase: phaseLoop };
 
 export const galleryGeometry = () => {
   const room = meshBuilder();

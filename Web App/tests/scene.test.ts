@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { fitModel } from "../src/scene/fitModel.ts";
 import { test } from "node:test";
-import { Box3, Mesh, MeshBasicMaterial, PerspectiveCamera, Vector2, Vector3 } from "three";
+import { Box3, Group, Mesh, MeshBasicMaterial, PerspectiveCamera, Vector2, Vector3 } from "three";
 import { projectGeometry } from "../src/scene/geometry.ts";
 import { createPicker, focusView, homeView, moveFocus, moveView, positionCamera, positionFocusCamera, turnView } from "../src/scene/interaction.ts";
 import { fieldOfView, galleryLayout, hall, homeDepth, projects } from "../src/scene/projects.ts";
@@ -200,16 +203,29 @@ test("raycasting uses the real mesh silhouette and nearest surface, including th
   material.dispose();
 });
 
-test("all three exhibits fit the home view with separate screen bounds on wide and narrow displays", () => {
+test("all three exhibits fit the home view with separate screen bounds on wide and narrow displays", async () => {
   const material = new MeshBasicMaterial();
-  const meshes = projects.map(({ id }) => new Mesh(projectGeometry[id](), material));
+  const models = await Promise.all(projects.map(async (project) => {
+    if (!("model" in project)) return new Mesh(projectGeometry[project.id](), material);
+
+    const bytes = await readFile(new URL(project.model.url));
+    const gltf = await new GLTFLoader().parseAsync(new Uint8Array(bytes).buffer, "");
+    const fitted = fitModel(gltf.scene, project.model.span);
+    const bounds = new Box3().setFromObject(fitted, true);
+    assert.ok(bounds.getCenter(new Vector3()).length() < 1e-5);
+    assert.ok(Math.abs(Math.max(...bounds.getSize(new Vector3()).toArray()) - project.model.span) < 1e-5);
+    const exhibit = new Group();
+    exhibit.add(fitted);
+    exhibit.userData.projectId = project.id;
+    return exhibit;
+  }));
   for (const [width, height] of [[1280, 800], [1920, 1080], [320, 740], [768, 850]]) {
     const layout = galleryLayout(width, height);
     const camera = new PerspectiveCamera(fieldOfView, width / height, 0.1, 100);
     camera.position.z = homeDepth;
     camera.updateMatrixWorld();
-    assert.ok(layout.helix.z - layout.phase.z >= 12 && layout.phase.z - layout.house.z >= 14);
-    const boxes = meshes.map((mesh, i) => {
+    assert.ok(layout.helix.z - layout.phase.z >= 12 && layout.phase.z - layout.omnicar.z >= 14);
+    const boxes = models.map((mesh, i) => {
       const id = projects[i].id;
       const pose = layout[id];
       mesh.position.set(pose.x, pose.y, pose.z);
@@ -218,11 +234,18 @@ test("all three exhibits fit the home view with separate screen bounds on wide a
       mesh.updateMatrixWorld();
       const screen = new Box3();
       const point = new Vector3();
-      const vertices = mesh.geometry.getAttribute("position");
-      for (let j = 0; j < vertices.count; j++) {
-        point.fromBufferAttribute(vertices, j).applyMatrix4(mesh.matrixWorld);
-        assert.ok(point.y > layout.floor);
-        screen.expandByPoint(point.project(camera));
+      mesh.traverse((child) => {
+        if (!(child instanceof Mesh)) return;
+        const vertices = child.geometry.getAttribute("position");
+        for (let j = 0; j < vertices.count; j++) {
+          point.fromBufferAttribute(vertices, j).applyMatrix4(child.matrixWorld);
+          assert.ok(point.y > layout.floor);
+          screen.expandByPoint(point.project(camera));
+        }
+      });
+      if (id === "omnicar") {
+        const center = screen.getCenter(new Vector3());
+        assert.equal(createPicker()(center, camera, models), id);
       }
       assert.ok(screen.min.x > -1 && screen.max.x < 1 && screen.min.y > -1 && screen.max.y < 1, id);
       screen.min.z = screen.max.z = 0;
@@ -232,6 +255,6 @@ test("all three exhibits fit the home view with separate screen bounds on wide a
       for (const other of boxes.slice(i + 1)) assert.equal(boxes[i].intersectsBox(other), false);
     }
   }
-  meshes.forEach((mesh) => mesh.geometry.dispose());
+  models.forEach((model) => model.traverse((child) => { if (child instanceof Mesh) child.geometry.dispose(); }));
   material.dispose();
 });

@@ -1,5 +1,5 @@
 import { useEffect, type RefObject } from "react";
-import type { Camera, Mesh, Vector2 } from "three";
+import type { Camera, Object3D, Vector2 } from "three";
 import { homeView, travel, turnFocus, turnView, zoomFocus } from "../scene/interaction.ts";
 import type { createPicker, focusView } from "../scene/interaction.ts";
 import type { ProjectId } from "../scene/projects.ts";
@@ -29,7 +29,7 @@ interface Props {
   transition: { elapsed: number };
   focusTransitionSeconds: number;
   initialPivot: RefObject<{ x: number; z: number }>;
-  targets: RefObject<Mesh[]>;
+  targets: RefObject<Object3D[]>;
   pointer: Vector2;
   pointerInside: RefObject<boolean>;
   drag: RefObject<GalleryDrag | null>;

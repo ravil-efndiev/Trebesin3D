@@ -1,6 +1,6 @@
 # Trebesin 3D
 
-Interactive portfolio for school and personal projects. Three illustrative models float in a full-screen Three.js gallery. The upper-right panel controls the optional camera, with project details directly beneath it.
+Interactive portfolio for school and personal projects. Helix Pavilion, Phase Loop, and Omni-Car float in a full-screen Three.js gallery. The upper-right panel controls the optional camera, with project details directly beneath it.
 
 The React app streams opt-in camera capture to FastAPI through a local Vite proxy. CVService validates each JPEG, runs MediaPipe Hand Landmarker, and returns up to two sets of 21 joints. The browser draws those joints and displays the gesture state recognized by CVService. [Task 3 implementation and acceptance plan](docs/hand-tracking-plan.md). See [AGENTS.md](AGENTS.md) for requirements and development rules.
 
@@ -73,6 +73,10 @@ CVService accepts `http://127.0.0.1:5173` and `http://localhost:5173` by default
 
 Hover or focus a project to inspect it. Click, tap, or press Enter to keep its details open. Drag a model to turn it. Tab reveals the keyboard project list, and the arrow keys turn the focused model. Escape, the close button, or a click in empty space clears a selection. Browsers without WebGL 2 show the project list directly. The portfolio works with the camera off.
 
+Static GLB exhibits use Three.js `GLTFLoader`. To replace another sample, put its gallery-ready GLB in `Web App/src/assets/projectModels/` and add a `model` entry to its project in `Web App/src/scene/projects.ts`, following Omni-Car. The URL points to the bundled asset and `span` sets its longest dimension in local scene units. The loader centers the model for rotation and retains its proportions and materials.
+
+Omni-Car uses a gallery copy derived from the supplied CAD export. To reproduce it from the model directory with gltfpack 1.3, run `gltfpack -i omnicar.glb -o omnicar-gallery.glb -si 0.02 -sp -mm`.
+
 The three exhibits occupy stations spanning 29.5 world units in depth. Drag empty space to orbit or scroll to travel. With the scene focused, W/S moves forward and back, A/D strafes, the arrow keys orbit, and Home resets the camera and pivot.
 
 Selecting an exhibit brings the camera in close and locks the orbit pivot to the exhibit. Move an open palm sideways or use the two-finger turn gesture to orbit horizontally. Move an open palm up or down to orbit vertically. Two-hand zoom adjusts the viewing distance. Click away, press Escape, or close the details to return to the camera position and angle from before selection.
@@ -111,7 +115,7 @@ The automatic scene fixture checks hover, tracking loss, selection, two-hand zoo
 
 ## Development notes
 
-- The frontend uses React, TypeScript, Vite, Tailwind CSS, and Lucide React icons. React Three Fiber renders the Three.js gallery. Each exhibit uses one combined mesh for rendering and picking. The scene consumes fresh tracking observations independently of camera capture and rendering cadence. Write Tailwind utility classes directly in JSX. Keep global defaults in `@layer base` in `Web App/src/index.css`.
+- The frontend uses React, TypeScript, Vite, Tailwind CSS, and Lucide React icons. React Three Fiber renders the Three.js gallery. Raycasting tests exhibit meshes, including the child meshes of imported models. The scene consumes fresh tracking observations independently of camera capture and rendering cadence. Write Tailwind utility classes directly in JSX. Keep global defaults in `@layer base` in `Web App/src/index.css`.
 - `CVService/requirements.in` lists direct dependencies. The lock was generated on Windows with Python 3.14. Verify native packages on your platform before claiming support. Use only the pinned `opencv-contrib-python` distribution.
 - After changing Python dependencies, run `pip check` and import checks, then regenerate the lock body with `python -m pip freeze --exclude pip` using the virtual environment. Preserve the lock header and review the diff.
 
